@@ -1,2 +1,3 @@
-# debra
-DEBRA (distributed epoch-based reclamation) concurrent memory reclamation
+# Distributed epoch-based memory reclamation
+
+...

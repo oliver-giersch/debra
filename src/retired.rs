@@ -1,0 +1,1 @@
+//! Type-erased caching of retired records
