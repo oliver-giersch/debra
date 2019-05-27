@@ -13,6 +13,7 @@ use typenum::{Unsigned, U0};
 use reclaim::{LocalReclaim, Reclaim};
 
 mod epoch;
+mod global;
 mod thread;
 mod retired;
 

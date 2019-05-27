@@ -9,4 +9,5 @@ repository = "https://github.com/oliver-giersch/debra"
 edition = "2018"
 
 [dependencies]
+arrayvec = "0.4.10"
 reclaim = { git = "https://github.com/oliver-giersch/reclaim" }

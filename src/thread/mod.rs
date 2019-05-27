@@ -15,5 +15,27 @@
 //!   - retire in current epoch's limbo bag
 //!   - seal all limbo bags with current epoch + 2
 //!   - push sealed bags on global stack
+use core::mem::ManuallyDrop;
+
+use typenum::U1;
+use reclaim::align::CacheAligned;
+
+use crate::retired::BagQueue;
 
 mod set;
+
+use self::set::{ThreadState, ThreadNode};
+
+struct Local {
+    state: ThreadState,
+    inner: LocalInner,
+}
+
+struct LocalInner {
+    ops_count: u32,
+    bags: EpochBags,
+    // thread_iter: ThreadStateIter,
+}
+
+struct EpochBags(ManuallyDrop<[BagQueue; 3]>);
+
