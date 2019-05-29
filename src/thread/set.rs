@@ -1,14 +1,21 @@
 //! Global concurrent intrusive linked-list based set for thread states with
 //! dynamic memory reclamation.
+//!
+//! **MAYBE UNSOUND**
+//!
+//! - not sure if reclaiming with current bag of exiting thread ensures no other
+//!   threads have e.g. an old iterator value
+//! - maybe switch to free-list
 use core::ops::Deref;
 
+use typenum::U1;
 use reclaim::align::CacheAligned;
 
 use crate::epoch::ThreadEpoch;
-use crate::{Atomic, Owned, Shared, Unlinked};
+use crate::{Atomic, Owned, Shared, Unlinked, Unprotected};
 
 ////////////////////////////////////////////////////////////////////////////////
-// ThreadStateSet
+// ThreadSet
 ////////////////////////////////////////////////////////////////////////////////
 
 pub(crate) struct ThreadSet;
@@ -25,7 +32,24 @@ impl ThreadSet {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// ThreadIter
+////////////////////////////////////////////////////////////////////////////////
+
 // TODO: How to iterate safely?
+pub(crate) struct ThreadIter(Option<Unprotected<ThreadNode, U1>>);
+
+impl ThreadIter {
+    #[inline]
+    pub fn get(&self) -> Option<&ThreadNode> {
+        unimplemented!()
+    }
+
+    #[inline]
+    pub fn next(&mut self) {
+        unimplemented!()
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // ThreadStateNode

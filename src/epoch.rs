@@ -46,3 +46,5 @@ impl ThreadEpoch {
         unimplemented!()
     }
 }
+
+// FIXME: better name: pub(crate) struct ThreadState(pub Epoch, pub bool);

@@ -1,4 +1,5 @@
 #![warn(missing_docs)]
+use core::sync::atomic::Ordering;
 
 pub use reclaim;
 pub use reclaim::typenum;
@@ -9,12 +10,17 @@ pub type Shared<'g, T, N = U0> = reclaim::Shared<'g, T, Debra, N>;
 pub type Unlinked<T, N = U0> = reclaim::Unlinked<T, Debra, N>;
 pub type Unprotected<T, N = U0> = reclaim::Unprotected<T, Debra, N>;
 
-use typenum::{Unsigned, U0};
-use reclaim::{LocalReclaim, Reclaim};
+pub use crate::thread::Local;
 
+use typenum::{Unsigned, U0};
+use reclaim::{AcquireResult, LocalReclaim, Marked, MarkedPtr, Reclaim, Protect};
+
+mod bag;
 mod epoch;
 mod global;
+mod local;
 mod thread;
+mod threads;
 mod retired;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -35,7 +41,7 @@ unsafe impl Reclaim for Debra {
 }
 
 unsafe impl LocalReclaim for Debra {
-    type Local = ();
+    type Local = Local;
     type RecordHeader = ();
 
     unsafe fn retire_local<T: 'static, N: Unsigned>(local: &Self::Local, unlinked: Unlinked<T, N>) {
@@ -46,3 +52,32 @@ unsafe impl LocalReclaim for Debra {
         unimplemented!()
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Guarded
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub struct Guarded<T, N: Unsigned>(T, N);
+
+unsafe impl Protect for Guarded<T, N> {
+    type Item = ();
+    type Reclaimer = ();
+    type MarkBits = ();
+
+    fn marked(&self) -> Marked<Shared<T, N>> {
+        unimplemented!()
+    }
+
+    fn acquire(&mut self, atomic: &Atomic<T, N>, order: Ordering) -> Marked<Shared<T, N>> {
+        unimplemented!()
+    }
+
+    fn acquire_if_equal(&mut self, atomic: &Atomic<T, N>, expected: MarkedPtr<T, N>, order: Ordering) -> AcquireResult<T, Debra, N> {
+        unimplemented!()
+    }
+
+    fn release(&mut self) {
+        unimplemented!()
+    }
+}
+
