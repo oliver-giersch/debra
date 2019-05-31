@@ -18,9 +18,9 @@ use reclaim::{AcquireResult, LocalReclaim, Marked, MarkedPtr, Reclaim, Protect};
 mod bag;
 mod epoch;
 mod global;
+mod list;
 mod local;
 mod thread;
-mod threads;
 mod retired;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -59,10 +59,17 @@ unsafe impl LocalReclaim for Debra {
 
 pub struct Guarded<T, N: Unsigned>(T, N);
 
-unsafe impl Protect for Guarded<T, N> {
-    type Item = ();
-    type Reclaimer = ();
-    type MarkBits = ();
+impl<T, N: Unsigned> Clone for Guarded<T, N> {
+    #[inline]
+    fn clone(&self) -> Self {
+        unimplemented!()
+    }
+}
+
+unsafe impl<T, N: Unsigned> Protect for Guarded<T, N> {
+    type Item = T;
+    type Reclaimer = Debra;
+    type MarkBits = N;
 
     fn marked(&self) -> Marked<Shared<T, N>> {
         unimplemented!()

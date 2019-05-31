@@ -72,16 +72,10 @@ use core::cell::{Cell, UnsafeCell};
 use core::mem::ManuallyDrop;
 use core::sync::atomic::Ordering;
 
-use typenum::U1;
-use reclaim::align::CacheAligned;
-
-use crate::epoch::Epoch;
+use crate::epoch::{Epoch, ThreadEpoch};
 use crate::global;
+use crate::list::ListEntry;
 use crate::retired::{BagQueue, Retired};
-
-mod set;
-
-use self::set::{ThreadState, ThreadNode};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Local
@@ -89,7 +83,7 @@ use self::set::{ThreadState, ThreadNode};
 
 #[derive(Debug)]
 pub struct Local {
-    state: ThreadState,
+    state: ListEntry<ThreadEpoch>,
     guard_count: Cell<usize>,
     inner: UnsafeCell<LocalInner>,
 }
@@ -117,6 +111,7 @@ impl Local {
 // LocalInner
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#[derive(Debug)]
 struct LocalInner {
     can_advance: bool,
     ops_count: u32,
@@ -131,7 +126,7 @@ impl LocalInner {
     const ADVANCE_THRESHOLD: u32 = 100;
 
     #[inline]
-    fn set_active(&mut self, thread_state: &ThreadState) {
+    fn set_active(&mut self, thread_state: &ThreadEpoch) {
         let global_epoch = global::EPOCH.load(Ordering::SeqCst);
 
         // the global epoch has been advanced, all incremental checks restart
@@ -177,6 +172,7 @@ impl LocalInner {
 // EpochBags
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#[derive(Debug)]
 struct EpochBags {
     queues: ManuallyDrop<[BagQueue; 3]>,
     current_idx: usize,
@@ -185,8 +181,7 @@ struct EpochBags {
 impl EpochBags {
     #[inline]
     fn retire_record(&mut self, record: Retired) {
-        let queue = &mut *self.queues[self.current_idx];
+        let queue = &mut self.queues[self.current_idx];
         unimplemented!()
     }
 }
-

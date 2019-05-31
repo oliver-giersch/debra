@@ -27,6 +27,7 @@ impl AtomicEpoch {
 
 /// A representation for a monotonically increasing epoch counter with wrapping
 /// behaviour.
+#[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) struct Epoch(usize);
 
 impl Epoch {
@@ -37,6 +38,7 @@ impl Epoch {
 }
 
 /// TODO: Doc...
+#[derive(Debug)]
 pub(crate) struct ThreadEpoch(AtomicUsize);
 
 impl ThreadEpoch {

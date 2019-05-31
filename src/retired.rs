@@ -4,7 +4,7 @@ use core::fmt;
 use core::mem::{self, ManuallyDrop};
 use core::ptr::NonNull;
 
-use arrayvec::{ArrayVec, CapacityError};
+use arrayvec::ArrayVec;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // BagQueue
@@ -29,9 +29,9 @@ impl BagQueue {
     #[inline]
     pub unsafe fn reclaim_full_bags(&mut self) {
         let mut node = self.head.next.take();
-        while let Some(bag) = node {
+        while let Some(mut bag) = node {
             node = bag.next.take();
-            for record in bag.retired {
+            for mut record in bag.retired {
                 record.reclaim();
             }
         }
