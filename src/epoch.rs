@@ -35,6 +35,11 @@ impl Epoch {
     pub fn increment(self) -> Self {
         Self(self.0.wrapping_add(EPOCH_INCREMENT))
     }
+
+    #[inline]
+    fn into_inner(self) -> usize {
+        self.0
+    }
 }
 
 /// TODO: Doc...
@@ -42,6 +47,11 @@ impl Epoch {
 pub(crate) struct ThreadEpoch(AtomicUsize);
 
 impl ThreadEpoch {
+    #[inline]
+    pub fn new(global_epoch: Epoch) -> Self {
+        Self(AtomicUsize::new(global_epoch.into_inner() & QUIESCENT_BIT))
+    }
+
     /// TODO: Doc...
     #[inline]
     pub fn load_decompose(&self, order: Ordering) -> (Epoch, bool) {

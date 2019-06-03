@@ -10,26 +10,28 @@ pub type Shared<'g, T, N = U0> = reclaim::Shared<'g, T, Debra, N>;
 pub type Unlinked<T, N = U0> = reclaim::Unlinked<T, Debra, N>;
 pub type Unprotected<T, N = U0> = reclaim::Unprotected<T, Debra, N>;
 
-pub use crate::thread::Local;
+pub use crate::local::Local;
 
+use crate::retired::Retired;
+use reclaim::prelude::*;
+use reclaim::{AcquireResult, MarkedPtr};
 use typenum::{Unsigned, U0};
-use reclaim::{AcquireResult, LocalReclaim, Marked, MarkedPtr, Reclaim, Protect};
 
+mod abandoned;
 mod bag;
 mod epoch;
 mod global;
 mod list;
 mod local;
-mod thread;
 mod retired;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Debra
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// TODO: Docs...
 pub struct Debra;
 
+// TODO: Move to default module
 unsafe impl Reclaim for Debra {
     unsafe fn retire<T: 'static, N: Unsigned>(unlinked: Unlinked<T, N>) {
         unimplemented!()
@@ -45,11 +47,15 @@ unsafe impl LocalReclaim for Debra {
     type RecordHeader = ();
 
     unsafe fn retire_local<T: 'static, N: Unsigned>(local: &Self::Local, unlinked: Unlinked<T, N>) {
-        unimplemented!()
+        Self::retire_local_unchecked(local, unlinked);
     }
 
-    unsafe fn retire_local_unchecked<T, N: Unsigned>(local: &Self::Local, unlinked: Unlinked<T, N>) {
-        unimplemented!()
+    unsafe fn retire_local_unchecked<T, N: Unsigned>(
+        local: &Self::Local,
+        unlinked: Unlinked<T, N>,
+    ) {
+        let unmarked = unlinked.into_marked_non_null().decompose_non_null();
+        local.retire_record(Retired::new_unchecked(unmarked));
     }
 }
 
@@ -79,7 +85,12 @@ unsafe impl<T, N: Unsigned> Protect for Guarded<T, N> {
         unimplemented!()
     }
 
-    fn acquire_if_equal(&mut self, atomic: &Atomic<T, N>, expected: MarkedPtr<T, N>, order: Ordering) -> AcquireResult<T, Debra, N> {
+    fn acquire_if_equal(
+        &mut self,
+        atomic: &Atomic<T, N>,
+        expected: MarkedPtr<T, N>,
+        order: Ordering,
+    ) -> AcquireResult<T, Debra, N> {
         unimplemented!()
     }
 
@@ -87,4 +98,3 @@ unsafe impl<T, N: Unsigned> Protect for Guarded<T, N> {
         unimplemented!()
     }
 }
-
