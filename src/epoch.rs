@@ -1,6 +1,6 @@
 //! Type safe epochs
 
-use core::ops::{Add, AddAssign};
+use core::ops::{Add, AddAssign, Sub};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 const EPOCH_INCREMENT: usize = 2;
@@ -16,7 +16,7 @@ pub(crate) struct AtomicEpoch(AtomicUsize);
 impl AtomicEpoch {
     #[inline]
     pub const fn new() -> Self {
-        Self(AtomicUsize::new(EPOCH_INCREMENT))
+        Self(AtomicUsize::new(0))
     }
 
     #[inline]
@@ -66,6 +66,15 @@ impl AddAssign<usize> for Epoch {
     }
 }
 
+impl Sub<usize> for Epoch {
+    type Output = Self;
+
+    #[inline]
+    fn sub(self, rhs: usize) -> Self::Output {
+        Self(self.0 - (rhs * EPOCH_INCREMENT))
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // ThreadState
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -104,7 +113,7 @@ impl ThreadState {
 // State
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub(crate) enum State {
     Active,
     Quiescent,

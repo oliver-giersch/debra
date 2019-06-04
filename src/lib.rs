@@ -19,7 +19,6 @@ use reclaim::{AcquireResult, MarkedPtr};
 use typenum::{Unsigned, U0};
 
 mod abandoned;
-mod bag;
 mod epoch;
 mod global;
 mod list;
@@ -34,10 +33,12 @@ pub struct Debra;
 
 // TODO: Move to default module
 unsafe impl Reclaim for Debra {
+    #[inline]
     unsafe fn retire<T: 'static, N: Unsigned>(unlinked: Unlinked<T, N>) {
         unimplemented!()
     }
 
+    #[inline]
     unsafe fn retire_unchecked<T, N: Unsigned>(unlinked: Unlinked<T, N>) {
         unimplemented!()
     }
@@ -47,10 +48,12 @@ unsafe impl LocalReclaim for Debra {
     type Local = Local;
     type RecordHeader = ();
 
+    #[inline]
     unsafe fn retire_local<T: 'static, N: Unsigned>(local: &Self::Local, unlinked: Unlinked<T, N>) {
         Self::retire_local_unchecked(local, unlinked);
     }
 
+    #[inline]
     unsafe fn retire_local_unchecked<T, N: Unsigned>(
         local: &Self::Local,
         unlinked: Unlinked<T, N>,

@@ -1,45 +1,34 @@
-//! Global and local thread state
-//!
-//! Each thread has:
-//!   - limbo bag (streaming) iterator: 3 bags, 1 always current
-//!   - thread state iterator
-//!   - operations counter
-//!
-//! On creation:
-//!   - allocate global thread-state
-//!   - insert into global set (based on heap address)
-//!
-//! On destruction:
-//!   - mark current global epoch
-//!   - remove own entry from global set
-//!   - retire in current epoch's limbo bag
-//!   - seal all limbo bags with current epoch + 2
-//!   - push sealed bags on global stack
+//! Thread local state
 
 use core::cell::{Cell, UnsafeCell};
 use core::mem::ManuallyDrop;
-use core::ptr;
 use core::sync::atomic::Ordering;
 
 use crate::epoch::{Epoch, State, ThreadState};
 use crate::global;
-use crate::retired::{BagQueue, Retired};
+use crate::retired::{Retired, SealedQueue};
 
+pub(crate) use self::bag::SealedEpochBags;
+
+use self::bag::EpochBags;
+
+type ThreadEntry = crate::list::ListEntry<ThreadState>;
 type ThreadStateIter = crate::list::Iter<'static, ThreadState>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Local
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// Thread local state required for distributed epoch-based reclamation.
 #[derive(Debug)]
 pub struct Local {
-    state: ManuallyDrop<ListEntry<ThreadState>>,
+    state: ManuallyDrop<ThreadEntry>,
     guard_count: Cell<usize>,
     inner: UnsafeCell<LocalInner>,
 }
 
 impl Local {
-    /// TODO: Doc...
+    /// Creates and globally registers a new [`Local`].
     #[inline]
     pub fn new() -> Self {
         let global_epoch = global::EPOCH.load(Ordering::SeqCst);
@@ -47,12 +36,13 @@ impl Local {
         let state = global::THREADS.insert(thread_epoch);
 
         Self {
-            state,
+            state: ManuallyDrop::new(state),
             guard_count: Cell::default(),
             inner: UnsafeCell::new(LocalInner::new(global_epoch)),
         }
     }
 
+    /// Marks the associated thread as active.
     #[inline]
     pub(crate) fn set_active(&self) {
         let count = self.guard_count.get();
@@ -64,6 +54,7 @@ impl Local {
         self.guard_count.set(count + 1);
     }
 
+    /// Marks the associated thread as inactive.
     #[inline]
     pub(crate) fn set_inactive(&self) {
         let count = self.guard_count.get();
@@ -79,8 +70,7 @@ impl Local {
     #[inline]
     pub(crate) fn retire_record(&self, record: Retired) {
         let inner = unsafe { &mut *self.inner.get() };
-
-        unimplemented!()
+        inner.bags.retire_record(record);
     }
 }
 
@@ -89,9 +79,11 @@ impl Drop for Local {
     fn drop(&mut self) {
         let state = unsafe { ManuallyDrop::take(&mut self.state) };
         let entry = global::THREADS.remove(state);
-        let retired = unsafe { Retired::new_unchecked(entry) };
-        // self.retire_record(retired); //TODO: retire_final_record ?
-        unimplemented!()
+
+        unsafe {
+            let inner = &mut *self.inner.get();
+            inner.bags.retire_thread_state(entry);
+        }
     }
 }
 
@@ -135,7 +127,9 @@ impl LocalInner {
             self.ops_count = 0;
             self.check_count = 0;
             self.thread_iter = global::THREADS.iter();
-            self.bags.rotate_and_reclaim(); // change current, empty "new" current bag queue
+
+            self.adopt_and_reclaim();
+            unsafe { self.bags.rotate_and_reclaim() };
         }
 
         self.ops_count += 1;
@@ -179,6 +173,28 @@ impl LocalInner {
 
         global_epoch
     }
+
+    #[inline]
+    fn adopt_and_reclaim(&mut self) {
+        for queues in global::ABANDONED.pop_all() {
+            for sealed in queues {
+                let x: SealedQueue = sealed;
+
+                // if epoch - 2 > sealed.epoch -> reclaim right away
+                // else retire in appropriate bag FIXME: can not do...
+            }
+        }
+
+        let mut abandonned = global::ABANDONED.pop_all();
+    }
+}
+
+impl Drop for LocalInner {
+    #[inline]
+    fn drop(&mut self) {
+        let bags = unsafe { ManuallyDrop::take(&mut self.bags) };
+        global::ABANDONED.push(bags.into_sealed(self.cached_local_epoch));
+    }
 }
 
 #[inline(always)]
@@ -191,36 +207,77 @@ fn can_advance(global_epoch: Epoch, other: &ThreadState) -> bool {
     }
 }
 
-impl Drop for LocalInner {
-    #[inline]
-    fn drop(&mut self) {
-        // global::ABANDONED.abandon_epoch_bags(self.epoch_bags);
-        unimplemented!()
-    }
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // EpochBags
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const BAG_COUNT: usize = 3;
+mod bag {
+    use core::ptr::NonNull;
 
-#[derive(Debug)]
-struct EpochBags {
-    current_idx: usize,
-    queues: [BagQueue; BAG_COUNT],
-}
+    use arrayvec::ArrayVec;
 
-impl EpochBags {
-    #[inline]
-    fn rotate_and_reclaim(&mut self) {
-        self.current_idx = (self.current_idx + 1) % BAG_COUNT;
-        unsafe { self.queues[self.current_idx].reclaim_full_bags() };
+    use crate::epoch::{Epoch, ThreadState};
+    use crate::list::Node;
+    use crate::retired::{BagQueue, Retired, SealedQueue};
+
+    const BAG_COUNT: usize = 3;
+
+    /// An array with **up to** three [`SealedQueue`]s.
+    pub(crate) type SealedEpochBags = ArrayVec<[SealedQueue; BAG_COUNT]>;
+
+    #[derive(Debug)]
+    pub(super) struct EpochBags {
+        curr_idx: usize,
+        queues: [BagQueue; BAG_COUNT],
     }
 
-    #[inline]
-    fn retire_record(&mut self, record: Retired) {
-        let curr = &mut self.queues[self.current_idx];
-        curr.retire_record(record);
+    impl EpochBags {
+        /// Creates a new empty set of [`EpochBags`].
+        #[inline]
+        pub fn new() -> Self {
+            Self { curr_idx: 0, queues: [BagQueue::new(), BagQueue::new(), BagQueue::new()] }
+        }
+
+        /// Converts the three bag queues into **up to** three non-empty
+        /// [`SealedQueues`].
+        #[inline]
+        pub fn into_sealed(self, current_epoch: Epoch) -> ArrayVec<[SealedQueue; BAG_COUNT]> {
+            self.into_sorted()
+                .into_iter()
+                .enumerate()
+                .filter_map(|(idx, queue)| queue.non_empty().map(|queue| (idx, queue)))
+                .map(|(idx, queue)| queue.seal(current_epoch - idx))
+                .collect()
+        }
+
+        /// Retires the given `record` in the current [`BagQueue`].
+        #[inline]
+        pub fn retire_record(&mut self, record: Retired) {
+            let curr = &mut self.queues[self.curr_idx];
+            curr.retire_record(record);
+        }
+
+        #[inline]
+        pub unsafe fn retire_thread_state(&mut self, state: NonNull<Node<ThreadState>>) {
+            let curr = &mut self.queues[self.curr_idx];
+            curr.retire_thread_state(state);
+        }
+
+        #[inline]
+        pub unsafe fn rotate_and_reclaim(&mut self) {
+            self.curr_idx = (self.curr_idx + 1) % BAG_COUNT;
+            self.queues[self.curr_idx].reclaim_full_bags();
+        }
+
+        #[inline]
+        fn into_sorted(self) -> ArrayVec<[BagQueue; BAG_COUNT]> {
+            let [a, b, c] = self.queues;
+            match self.curr_idx {
+                0 => ArrayVec::from([a, c, b]),
+                1 => ArrayVec::from([b, a, c]),
+                2 => ArrayVec::from([c, b, a]),
+                _ => unreachable!(),
+            }
+        }
     }
 }

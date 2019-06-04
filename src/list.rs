@@ -207,6 +207,7 @@ impl<T> Node<T> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// An iterator over a [`List`].
+#[derive(Debug)]
 pub(crate) struct Iter<'a, T>(IterInner<'a, T>);
 
 impl<'a, T> Iterator for Iter<'a, T> {
@@ -233,18 +234,18 @@ impl<'a, T> Iter<'a, T> {
     /// Returns an error if a node is loaded whose predecessor is already marked
     /// for removal.
     #[inline]
-    pub fn load_current(&mut self, order: Ordering) -> Result<Option<&T>, IterError> {
+    pub fn load_current(&mut self, order: Ordering) -> Result<Option<&'a T>, IterError> {
         let (curr, tag) = unsafe { self.0.prev.as_ref().load(order).decompose_ref() };
         if tag == REMOVE_TAG {
             Err(IterError::Retry)
         } else {
-            Ok(curr)
+            Ok(curr.map(|node| node.elem()))
         }
     }
 
     #[inline]
-    pub fn load_head(&self, order: Ordering) -> Option<&T> {
-        unsafe { self.0.head.load(order).as_ref() }
+    pub fn load_head(&self, order: Ordering) -> Option<&'a T> {
+        unsafe { self.0.head.load(order).as_ref().map(|node| node.elem()) }
     }
 }
 
@@ -260,6 +261,7 @@ pub(crate) enum IterError {
 // IterInner
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#[derive(Debug)]
 struct IterInner<'a, T> {
     head: &'a AtomicMarkedPtr<Node<T>>,
     prev: NonNull<AtomicMarkedPtr<Node<T>>>,
