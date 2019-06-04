@@ -1,9 +1,14 @@
 //! Type safe epochs
 
+use core::ops::{Add, AddAssign};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 const EPOCH_INCREMENT: usize = 2;
 const QUIESCENT_BIT: usize = 0b1;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// AtomicEpoch
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// TODO: Doc...
 pub(crate) struct AtomicEpoch(AtomicUsize);
@@ -20,13 +25,16 @@ impl AtomicEpoch {
     }
 
     #[inline]
-    pub fn store(&self, epoch: Epoch, order: Ordering) {
-        self.0.store(epoch.0, order);
+    pub fn compare_and_swap(&self, current: Epoch, new: Epoch, order: Ordering) -> Epoch {
+        Epoch(self.0.compare_and_swap(current.0, new.0, order))
     }
 }
 
-/// A representation for a monotonically increasing epoch counter with wrapping
-/// behaviour.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Epoch
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// A monotonically increasing epoch counter with wrapping overflow behaviour.
 #[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) struct Epoch(usize);
 
@@ -42,21 +50,62 @@ impl Epoch {
     }
 }
 
-/// TODO: Doc...
-#[derive(Debug)]
-pub(crate) struct ThreadEpoch(AtomicUsize);
+impl Add<usize> for Epoch {
+    type Output = Self;
 
-impl ThreadEpoch {
     #[inline]
-    pub fn new(global_epoch: Epoch) -> Self {
-        Self(AtomicUsize::new(global_epoch.into_inner() & QUIESCENT_BIT))
-    }
-
-    /// TODO: Doc...
-    #[inline]
-    pub fn load_decompose(&self, order: Ordering) -> (Epoch, bool) {
-        unimplemented!()
+    fn add(self, rhs: usize) -> Self::Output {
+        Self(self.0.wrapping_add(rhs * EPOCH_INCREMENT))
     }
 }
 
-// FIXME: better name: pub(crate) struct ThreadState(pub Epoch, pub bool);
+impl AddAssign<usize> for Epoch {
+    #[inline]
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 = self.0.wrapping_add(rhs * EPOCH_INCREMENT);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// ThreadState
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// The concurrently accessible state of a thread.
+#[derive(Debug)]
+pub(crate) struct ThreadState(AtomicUsize);
+
+impl ThreadState {
+    #[inline]
+    pub fn new(global_epoch: Epoch) -> Self {
+        Self(AtomicUsize::new(global_epoch.into_inner() | QUIESCENT_BIT))
+    }
+
+    #[inline]
+    pub fn is_same(&self, other: &Self) -> bool {
+        self as *const Self == other as *const Self
+    }
+
+    #[inline]
+    pub fn load_decompose(&self, order: Ordering) -> (Epoch, bool) {
+        let state = self.0.load(order);
+        (Epoch(state & !QUIESCENT_BIT), state & QUIESCENT_BIT == 0)
+    }
+
+    #[inline]
+    pub fn store(&self, epoch: Epoch, state: State, order: Ordering) {
+        match state {
+            State::Active => self.0.store(epoch.0, order),
+            State::Quiescent => self.0.store(epoch.0 | QUIESCENT_BIT, order),
+        };
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// State
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Debug)]
+pub(crate) enum State {
+    Active,
+    Quiescent,
+}

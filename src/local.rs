@@ -15,69 +15,17 @@
 //!   - retire in current epoch's limbo bag
 //!   - seal all limbo bags with current epoch + 2
 //!   - push sealed bags on global stack
-//!
-//! To mark active:
-//!
-//!     ```ignore
-//!     let global_epoch = GLOBAL_EPOCH.load();
-//!     let local_epoch = state.cached_local_epoch(); // access TLS for cached value
-//!
-//!     if global_epoch != local_epoch {
-//!         state.can_advance = false;
-//!         state.ops_count = 0;
-//!         state.check_count = 0;
-//!         state.thread_iter = THREADS.iter();
-//!         state.bags.rotate(); // change current, empty "new" current bag queue
-//!     }
-//!
-//!     state.ops_count += 1;
-//!     if state.ops_count >= THRESHOLD {
-//!         state.ops_count = 0;
-//!         let other = state.thread_iter.prev.load().unwrap_or_else(|| {
-//!             let head = THREADS.iter();
-//!             state.can_advance = true;
-//!             state.thread_iter.prev = head;
-//!             head.load().unwrap_or_else(|| unreachable!())
-//!         });
-//!
-//!         let (other, tag) = Shared::decompose_ref(other);
-//!         if tag != REMOVE_TAG {
-//!             if check_try_advance_conditions(global_epoch, thread_state, other) {
-//!                 state.thread_iter.prev = &*other.next;
-//!                 state.check_count += 1;
-//!                 if state.can_advance && state.check_count >= CHECK_THRESHOLD {
-//!                     let _ = GLOBAL_EPOCH.compare_exchange(global_epoch, global_epoch.increment());
-//!                 }
-//!             }
-//!         }
-//!
-//!         thread_state.epoch.store(global_epoch, false);
-//!     ```
-//!
-//!     ```ignore
-//!     fn check_advance_conditions(global_epoch: Epoch, thread_state: &ThreadState, other: &ThreadState) -> bool {
-//!         if thread_state as *const _ == other as *const _ {
-//!             return true;
-//!         }
-//!
-//!         let (epoch, is_active) = other.epoch.decompose_load();
-//!         if epoch == global_epoch || !is_active {
-//!             return true;
-//!         }
-//!
-//!         return false;
-//!     }
-//!     ```
+
 use core::cell::{Cell, UnsafeCell};
 use core::mem::ManuallyDrop;
 use core::ptr;
 use core::sync::atomic::Ordering;
 
-use crate::epoch::{Epoch, ThreadEpoch};
+use crate::epoch::{Epoch, State, ThreadState};
 use crate::global;
 use crate::retired::{BagQueue, Retired};
 
-type ThreadIter = crate::list::Iter<'static, ThreadEpoch>;
+type ThreadStateIter = crate::list::Iter<'static, ThreadState>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Local
@@ -85,7 +33,7 @@ type ThreadIter = crate::list::Iter<'static, ThreadEpoch>;
 
 #[derive(Debug)]
 pub struct Local {
-    state: ManuallyDrop<ListEntry<ThreadEpoch>>,
+    state: ManuallyDrop<ListEntry<ThreadState>>,
     guard_count: Cell<usize>,
     inner: UnsafeCell<LocalInner>,
 }
@@ -95,7 +43,7 @@ impl Local {
     #[inline]
     pub fn new() -> Self {
         let global_epoch = global::EPOCH.load(Ordering::SeqCst);
-        let thread_epoch = ThreadEpoch::new(global_epoch);
+        let thread_epoch = ThreadState::new(global_epoch);
         let state = global::THREADS.insert(thread_epoch);
 
         Self {
@@ -110,10 +58,21 @@ impl Local {
         let count = self.guard_count.get();
         if count == 0 {
             let inner = unsafe { &mut *self.inner.get() };
-            inner.set_active(&self.state);
+            inner.set_active(&**self.state);
         }
 
         self.guard_count.set(count + 1);
+    }
+
+    #[inline]
+    pub(crate) fn set_inactive(&self) {
+        let count = self.guard_count.get();
+        if count == 1 {
+            let inner = unsafe { &*self.inner.get() };
+            inner.set_inactive(&**self.state);
+        }
+
+        self.guard_count.set(count - 1);
     }
 
     /// Retires an unlinked record in the current epoch's bag queue.
@@ -128,9 +87,9 @@ impl Local {
 impl Drop for Local {
     #[inline]
     fn drop(&mut self) {
-        let state = unsafe { take_list_token(&mut self.state) };
-        // let entry = global::THREADS.remove_entry(state);
-        // let retired = unsafe { Retired::new_unchecked(entry) };
+        let state = unsafe { ManuallyDrop::take(&mut self.state) };
+        let entry = global::THREADS.remove(state);
+        let retired = unsafe { Retired::new_unchecked(entry) };
         // self.retire_record(retired); //TODO: retire_final_record ?
         unimplemented!()
     }
@@ -167,7 +126,7 @@ impl LocalInner {
     }
 
     #[inline]
-    fn set_active(&mut self, thread_state: &ThreadEpoch) {
+    fn set_active(&mut self, thread_state: &ThreadState) {
         let global_epoch = global::EPOCH.load(Ordering::SeqCst);
 
         // the global epoch has been advanced, restart all incremental checks
@@ -175,37 +134,60 @@ impl LocalInner {
             self.can_advance = false;
             self.ops_count = 0;
             self.check_count = 0;
-            // self.thread_iter = THREADS.iter();
-            // self.bags.rotate_and_reclaim(); // change current, empty "new" current bag queue
+            self.thread_iter = global::THREADS.iter();
+            self.bags.rotate_and_reclaim(); // change current, empty "new" current bag queue
         }
 
         self.ops_count += 1;
+        let epoch = self.try_advance(thread_state, global_epoch);
+
+        thread_state.store(epoch, State::Active, Ordering::SeqCst);
+        self.cached_local_epoch = epoch;
+    }
+
+    #[inline]
+    fn set_inactive(&self, thread_state: &ThreadState) {
+        thread_state.store(self.cached_local_epoch, State::Quiescent, Ordering::SeqCst);
+    }
+
+    #[inline]
+    fn try_advance(&mut self, thread_state: &ThreadState, global_epoch: Epoch) -> Epoch {
         if self.ops_count >= Self::CHECK_THRESHOLD {
             self.ops_count = 0;
 
-            // need self.thread_iter here ...
-            // let other: Shared<'iter, ThreadNode> = self
-            //     .thread_iter
-            //     .load_current(SeqCst)
-            //     .unwrap_or_else(|| {
-            //         self.can_advance = true;
-            //         let iter = global::THREADS.iter();
-            //         iter.load_current(SeqCst).unwrap_or_else(|| unreachable!())
-            //     });
-            //
-            // let (other, tag) = Shared::decompose_ref(other);
-            // if tag != DELETE_TAG {
-            //     if is_same(other, thread_state) || thread_state.epoch.load_decompose(SeqCst).can_advance(global_epoch) {
-            //         self.check_count += 1;
-            //         // curr may have been removed already, so we load again
-            //         self.thread_iter.advance();
-            //
-            //         if self.check_count >= Self::ADVANCE_THRESHOLD && self.can_advance {
-            //             let _ = global::EPOCH.compare_and_swap(global_epoch, global_epoch.increment(), SeqCst);
-            //         }
-            //     }
-            // }
+            if let Ok(curr) = self.thread_iter.load_current(Ordering::SeqCst) {
+                let other = curr.unwrap_or_else(|| {
+                    self.can_advance = true;
+                    self.thread_iter = global::THREADS.iter();
+                    self.thread_iter.load_head(Ordering::SeqCst).unwrap_or_else(|| unreachable!())
+                });
+
+                if thread_state.is_same(other) || can_advance(global_epoch, other) {
+                    self.check_count += 1;
+                    let _ = self.thread_iter.next();
+
+                    if self.can_advance && self.check_count >= Self::ADVANCE_THRESHOLD {
+                        return global::EPOCH.compare_and_swap(
+                            global_epoch,
+                            global_epoch.increment(),
+                            Ordering::SeqCst,
+                        );
+                    }
+                }
+            }
         }
+
+        global_epoch
+    }
+}
+
+#[inline(always)]
+fn can_advance(global_epoch: Epoch, other: &ThreadState) -> bool {
+    let (epoch, is_active) = other.load_decompose(Ordering::SeqCst);
+    if epoch == global_epoch || !is_active {
+        true
+    } else {
+        false
     }
 }
 
@@ -221,23 +203,24 @@ impl Drop for LocalInner {
 // EpochBags
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+const BAG_COUNT: usize = 3;
+
 #[derive(Debug)]
 struct EpochBags {
-    queues: [BagQueue; 3],
     current_idx: usize,
+    queues: [BagQueue; BAG_COUNT],
 }
 
 impl EpochBags {
+    #[inline]
+    fn rotate_and_reclaim(&mut self) {
+        self.current_idx = (self.current_idx + 1) % BAG_COUNT;
+        unsafe { self.queues[self.current_idx].reclaim_full_bags() };
+    }
+
     #[inline]
     fn retire_record(&mut self, record: Retired) {
         let curr = &mut self.queues[self.current_idx];
         curr.retire_record(record);
     }
-}
-
-#[inline]
-unsafe fn take_list_token(
-    entry: &mut ManuallyDrop<ListEntry<ThreadEpoch>>,
-) -> ListEntry<ThreadEpoch> {
-    ManuallyDrop::into_inner(ptr::read(slot))
 }

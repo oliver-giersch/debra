@@ -17,8 +17,7 @@ use reclaim::{MarkedNonNull, MarkedPtr};
 
 type AtomicMarkedPtr<T> = reclaim::AtomicMarkedPtr<T, U1>;
 
-/// The tag for marking a value for removal.
-pub const REMOVE_TAG: usize = 0b1;
+const REMOVE_TAG: usize = 0b1;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Queue
@@ -122,10 +121,7 @@ impl<T> List<T> {
 
     #[inline]
     fn iter_inner(&self) -> IterInner<T> {
-        IterInner {
-            head: &self.head,
-            prev: NonNull::from(&self.head),
-        }
+        IterInner { head: &self.head, prev: NonNull::from(&self.head) }
     }
 }
 
@@ -143,39 +139,37 @@ impl<T> Drop for List<T> {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Iter
+// ListEntry
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// An iterator over a [`List`].
-pub(crate) struct Iter<'a, T>(IterInner<'a, T>);
+/// A token representing ownership of an entry in a [`List`]
+#[derive(Debug)]
+#[must_use]
+pub(crate) struct ListEntry<T>(NonNull<Node<T>>);
 
-impl<'a, T> Iterator for Iter<'a, T> {
-    type Item = &'a T;
-
+impl<T> ListEntry<T> {
     #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().map(|IterPos { curr, .. }| unsafe { &*curr.as_ptr() }.elem())
+    fn into_inner(self) -> NonNull<Node<T>> {
+        let inner = self.0;
+        mem::forget(self);
+        inner
     }
 }
 
-impl<'a, T> Iter<'a, T> {
-    /// Creates a new iterator for the given `list` that starts at the given
-    /// list position.
-    #[inline]
-    pub fn new(list: &'a List<T>, start: &AtomicMarkedPtr<Node<T>>) -> Self {
-        Self(IterInner {
-            head: &list.head,
-            prev: NonNull::from(start),
-        })
-    }
+impl<T> Deref for ListEntry<T> {
+    type Target = T;
 
-    /// Loads the entry and its tag at the current position of the iterator.
     #[inline]
-    pub fn load_current(&self, order: Ordering) -> Option<(&T, usize)> {
-        unsafe {
-            let (reference, tag) = self.0.prev.as_ref().load(order).decompose_ref();
-            reference.map(|node| (node.elem(), tag))
-        }
+    fn deref(&self) -> &Self::Target {
+        let node = unsafe { &*self.0.as_ptr() };
+        &*node.elem
+    }
+}
+
+impl<T> Drop for ListEntry<T> {
+    #[inline]
+    fn drop(&mut self) {
+        panic!("set entries must be used to remove their associated entry");
     }
 }
 
@@ -204,11 +198,62 @@ impl<T> Node<T> {
 
     #[inline]
     fn new(elem: T) -> Self {
-        Self {
-            elem: CacheAligned(elem),
-            next: CacheAligned(AtomicMarkedPtr::null()),
+        Self { elem: CacheAligned(elem), next: CacheAligned(AtomicMarkedPtr::null()) }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Iter
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// An iterator over a [`List`].
+pub(crate) struct Iter<'a, T>(IterInner<'a, T>);
+
+impl<'a, T> Iterator for Iter<'a, T> {
+    type Item = &'a T;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|IterPos { curr, .. }| unsafe { &*curr.as_ptr() }.elem())
+    }
+}
+
+impl<'a, T> Iter<'a, T> {
+    /// Creates a new iterator for the given `list` that starts at the given
+    /// list position.
+    #[inline]
+    pub fn new(list: &'a List<T>, start: &AtomicMarkedPtr<Node<T>>) -> Self {
+        Self(IterInner { head: &list.head, prev: NonNull::from(start) })
+    }
+
+    /// Loads the entry and its tag at the current position of the iterator.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a node is loaded whose predecessor is already marked
+    /// for removal.
+    #[inline]
+    pub fn load_current(&mut self, order: Ordering) -> Result<Option<&T>, IterError> {
+        let (curr, tag) = unsafe { self.0.prev.as_ref().load(order).decompose_ref() };
+        if tag == REMOVE_TAG {
+            Err(IterError::Retry)
+        } else {
+            Ok(curr)
         }
     }
+
+    #[inline]
+    pub fn load_head(&self, order: Ordering) -> Option<&T> {
+        unsafe { self.0.head.load(order).as_ref() }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// IterError
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub(crate) enum IterError {
+    Retry,
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -278,41 +323,6 @@ impl<T> IterPos<T> {
         } else {
             None
         }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// ListEntry
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// A token representing ownership of an entry in a [`List`]
-#[derive(Debug)]
-#[must_use]
-pub struct ListEntry<T>(NonNull<Node<T>>);
-
-impl<T> ListEntry<T> {
-    #[inline]
-    fn into_inner(self) -> NonNull<Node<T>> {
-        let inner = self.0;
-        mem::forget(self);
-        inner
-    }
-}
-
-impl<T> Deref for ListEntry<T> {
-    type Target = T;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        let node = unsafe { &*self.0.as_ptr() };
-        &*node.elem
-    }
-}
-
-impl<T> Drop for ListEntry<T> {
-   #[inline]
-    fn drop(&mut self) {
-        panic!("set entries must be used to remove their associated entry");
     }
 }
 

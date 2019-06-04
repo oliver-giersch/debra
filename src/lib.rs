@@ -1,3 +1,4 @@
+#![feature(manually_drop_take)]
 #![warn(missing_docs)]
 use core::sync::atomic::Ordering;
 
