@@ -9,8 +9,6 @@ use arrayvec::ArrayVec;
 use crate::epoch::{Epoch, ThreadState};
 use crate::list::Node;
 
-const DEFAULT_BAG_SIZE: usize = 256;
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // SealedQueue
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -44,7 +42,7 @@ impl BagQueue {
     /// non-empty queue wrapped in a [`Some`].
     #[inline]
     pub fn non_empty(self) -> Option<BagQueue> {
-        if self.head.retired.is_empty() && self.head.next.is_none() {
+        if self.head.retired.len() == 0 && self.head.next.is_none() {
             None
         } else {
             Some(self)
@@ -53,8 +51,8 @@ impl BagQueue {
 
     /// Seals the [`BagQueue`] with the given [`Epoch`].
     #[inline]
-    pub fn seal(self, seal: Epoch) -> SealedQueue {
-        SealedQueue { seal, queue: self }
+    pub fn seal(self, seal: Epoch) -> Box<SealedQueue> {
+        Box::new(SealedQueue { seal, queue: self })
     }
 
     /// Retires a record in the current first [`RetiredBag`].
@@ -106,12 +104,11 @@ impl BagQueue {
     }
 }
 
-// TODO: impl Drop (clear head + call reclaim_full_bags)
-//       when? other thread drops BagQueue as part of SealedQueue
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // RetiredBag
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+const DEFAULT_BAG_SIZE: usize = 256;
 
 #[derive(Debug)]
 pub(crate) struct RetiredBag {
