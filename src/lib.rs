@@ -1,9 +1,12 @@
 #![feature(manually_drop_take)]
 #![warn(missing_docs)]
+
 use core::sync::atomic::Ordering;
 
 pub use reclaim;
 pub use reclaim::typenum;
+
+pub use crate::local::Local;
 
 pub type Atomic<T, N = U0> = reclaim::Atomic<T, Debra, N>;
 pub type Owned<T, N = U0> = reclaim::Owned<T, Debra, N>;
@@ -11,12 +14,11 @@ pub type Shared<'g, T, N = U0> = reclaim::Shared<'g, T, Debra, N>;
 pub type Unlinked<T, N = U0> = reclaim::Unlinked<T, Debra, N>;
 pub type Unprotected<T, N = U0> = reclaim::Unprotected<T, Debra, N>;
 
-pub use crate::local::Local;
-
-use crate::retired::Retired;
 use reclaim::prelude::*;
 use reclaim::{AcquireResult, MarkedPtr};
 use typenum::{Unsigned, U0};
+
+use crate::retired::Retired;
 
 mod abandoned;
 mod default;

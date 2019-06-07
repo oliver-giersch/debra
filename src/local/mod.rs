@@ -89,5 +89,3 @@ impl Drop for Local {
         }
     }
 }
-
-mod bagX {}
