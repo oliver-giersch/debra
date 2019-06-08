@@ -1,3 +1,5 @@
+//! TODO: Docs...
+
 #![feature(manually_drop_take)]
 #![warn(missing_docs)]
 
@@ -21,6 +23,7 @@ use typenum::{Unsigned, U0};
 use crate::retired::Retired;
 
 mod abandoned;
+mod bag;
 mod default;
 mod epoch;
 mod global;
@@ -84,14 +87,17 @@ unsafe impl<T, N: Unsigned> Protect for Guarded<T, N> {
     type Reclaimer = Debra;
     type MarkBits = N;
 
+    #[inline]
     fn marked(&self) -> Marked<Shared<T, N>> {
         unimplemented!()
     }
 
+    #[inline]
     fn acquire(&mut self, atomic: &Atomic<T, N>, order: Ordering) -> Marked<Shared<T, N>> {
         unimplemented!()
     }
 
+    #[inline]
     fn acquire_if_equal(
         &mut self,
         atomic: &Atomic<T, N>,
@@ -101,6 +107,7 @@ unsafe impl<T, N: Unsigned> Protect for Guarded<T, N> {
         unimplemented!()
     }
 
+    #[inline]
     fn release(&mut self) {
         unimplemented!()
     }

@@ -1,9 +1,12 @@
 use core::mem::ManuallyDrop;
+use core::ptr::NonNull;
 use core::sync::atomic::Ordering;
 
+use crate::bag::{BagPool, EpochBagQueues};
 use crate::epoch::{Epoch, State, ThreadState};
 use crate::global;
-use crate::local::bag::EpochBags;
+use crate::list::Node;
+use crate::retired::Retired;
 
 type ThreadEntry = crate::list::ListEntry<ThreadState>;
 type ThreadStateIter = crate::list::Iter<'static, ThreadState>;
@@ -14,11 +17,12 @@ type ThreadStateIter = crate::list::Iter<'static, ThreadState>;
 
 #[derive(Debug)]
 pub(super) struct LocalInner {
-    pub(super) bags: ManuallyDrop<EpochBags>,
-    can_advance: bool,
-    ops_count: u32,
-    check_count: u32,
+    bags: ManuallyDrop<EpochBagQueues>,
+    bag_pool: BagPool,
     cached_local_epoch: Epoch,
+    can_advance: bool,
+    check_count: u32,
+    ops_count: u32,
     thread_iter: ThreadStateIter,
 }
 
@@ -29,11 +33,12 @@ impl LocalInner {
     #[inline]
     pub fn new(global_epoch: Epoch) -> Self {
         Self {
-            bags: ManuallyDrop::new(EpochBags::new()),
-            can_advance: false,
-            ops_count: 0,
-            check_count: 0,
+            bags: ManuallyDrop::new(EpochBagQueues::new()),
+            bag_pool: BagPool::new(),
             cached_local_epoch: global_epoch,
+            can_advance: false,
+            check_count: 0,
+            ops_count: 0,
             thread_iter: global::THREADS.iter(),
         }
     }
@@ -50,7 +55,7 @@ impl LocalInner {
             self.thread_iter = global::THREADS.iter();
 
             self.adopt_and_reclaim();
-            unsafe { self.bags.rotate_and_reclaim() };
+            unsafe { self.bags.rotate_and_reclaim(&mut self.bag_pool) };
         }
 
         self.ops_count += 1;
@@ -63,6 +68,16 @@ impl LocalInner {
     #[inline]
     pub fn set_inactive(&self, thread_state: &ThreadState) {
         thread_state.store(self.cached_local_epoch, State::Quiescent, Ordering::SeqCst);
+    }
+
+    #[inline]
+    pub fn retire_record(&mut self, record: Retired) {
+        self.bags.retire_record(record, &mut self.bag_pool);
+    }
+
+    #[inline]
+    pub unsafe fn retire_final_record(&mut self, record: Retired) {
+        self.bags.retire_final_record(record);
     }
 
     #[inline]

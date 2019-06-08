@@ -4,13 +4,10 @@ use core::cell::{Cell, UnsafeCell};
 use core::mem::ManuallyDrop;
 use core::sync::atomic::Ordering;
 
-use crate::epoch::{Epoch, State, ThreadState};
+use crate::epoch::ThreadState;
 use crate::global;
-use crate::retired::{Retired, SealedQueue};
+use crate::retired::Retired;
 
-pub(crate) use self::bag::SealedEpochBags;
-
-mod bag;
 mod inner;
 
 use self::inner::LocalInner;
@@ -73,7 +70,14 @@ impl Local {
     #[inline]
     pub(crate) fn retire_record(&self, record: Retired) {
         let inner = unsafe { &mut *self.inner.get() };
-        inner.bags.retire_record(record);
+        inner.retire_record(record);
+    }
+}
+
+impl Default for Local {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -84,8 +88,9 @@ impl Drop for Local {
         let entry = global::THREADS.remove(state);
 
         unsafe {
+            let retired = Retired::new_unchecked(entry);
             let inner = &mut *self.inner.get();
-            inner.bags.retire_thread_state(entry);
+            inner.retire_final_record(retired);
         }
     }
 }
