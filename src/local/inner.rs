@@ -1,11 +1,9 @@
 use core::mem::ManuallyDrop;
-use core::ptr::NonNull;
 use core::sync::atomic::Ordering;
 
 use crate::bag::{BagPool, EpochBagQueues};
 use crate::epoch::{Epoch, State, ThreadState};
 use crate::global;
-use crate::list::Node;
 use crate::retired::Retired;
 
 type ThreadEntry = crate::list::ListEntry<ThreadState>;
