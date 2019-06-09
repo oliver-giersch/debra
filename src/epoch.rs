@@ -1,6 +1,6 @@
 //! Type safe epochs
 
-use core::ops::{Add, AddAssign, Sub};
+use core::ops::{Add, Sub};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 const EPOCH_INCREMENT: usize = 2;
@@ -59,19 +59,12 @@ impl Add<usize> for Epoch {
     }
 }
 
-impl AddAssign<usize> for Epoch {
-    #[inline]
-    fn add_assign(&mut self, rhs: usize) {
-        self.0 = self.0.wrapping_add(rhs * EPOCH_INCREMENT);
-    }
-}
-
 impl Sub<usize> for Epoch {
     type Output = Self;
 
     #[inline]
     fn sub(self, rhs: usize) -> Self::Output {
-        Self(self.0 - (rhs * EPOCH_INCREMENT))
+        Self(self.0.wrapping_sub(rhs * EPOCH_INCREMENT))
     }
 }
 
@@ -113,7 +106,7 @@ impl ThreadState {
 // State
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum State {
     Active,
     Quiescent,

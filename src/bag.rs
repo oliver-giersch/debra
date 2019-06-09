@@ -1,9 +1,10 @@
 use core::mem;
+use core::ptr::NonNull;
 
 use crate::epoch::Epoch;
 use crate::retired::Retired;
 
-use arrayvec::ArrayVec;
+use arrayvec::{ArrayVec, IntoIter};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // EpochBagQueues
@@ -26,17 +27,25 @@ impl EpochBagQueues {
         Self { queues: [BagQueue::new(), BagQueue::new(), BagQueue::new()], curr_idx: 0 }
     }
 
-    /*/// Converts the three bag queues into **up to** three non-empty
+    /// Converts the three bag queues into **up to** three non-empty
     /// [`SealedQueues`].
     #[inline]
-    pub fn into_sealed(self, current_epoch: Epoch) -> SealedEpochBags {
-        self.into_sorted()
-            .into_iter()
-            .enumerate()
-            .filter_map(|(idx, queue)| queue.non_empty().map(|queue| (idx, queue)))
-            .map(|(idx, queue)| queue.seal(current_epoch - idx))
-            .collect()
-    }*/
+    pub fn into_sealed(
+        self,
+        current_epoch: Epoch,
+    ) -> Option<(NonNull<SealedQueue>, NonNull<SealedQueue>)> {
+        let mut iter: IntoIter<[BagQueue; BAG_QUEUE_COUNT]> = self.into_sorted().into_iter();
+        iter.enumerate().filter_map(|(idx, queue)| queue.into_sealed(current_epoch - idx)).fold(
+            None,
+            |acc, tail| match acc {
+                Some((head, mut prev_tail)) => {
+                    unsafe { prev_tail.as_mut().next = Some(tail) };
+                    Some((head, tail))
+                }
+                None => Some((tail, tail)),
+            },
+        )
+    }
 
     /// Retires the given `record` in the current [`BagQueue`].
     #[inline]
@@ -120,6 +129,34 @@ impl BagPool {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// SealedQueue
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Debug)]
+pub(crate) struct SealedSubList {
+    head: NonNull<SealedQueue>,
+    tail: NonNull<SealedQueue>,
+}
+
+impl SealedSubList {
+    #[inline]
+    fn new(head: NonNull<SealedQueue>) -> Self {
+        Self { head, tail: head }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// SealedQueue
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Debug)]
+pub(crate) struct SealedQueue {
+    next: Option<NonNull<SealedQueue>>,
+    seal: Epoch,
+    queue: BagQueue,
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 // BagQueue
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -139,33 +176,26 @@ impl BagQueue {
         Self { head: BagNode::boxed() }
     }
 
+    /// Returns `true` if the head node is both empty and has no successor.
     #[inline]
     fn is_empty(&self) -> bool {
         self.head.retired_records.len() == 0 && self.head.next.is_none()
     }
 
-    #[inline]
-    fn into_sealed(self, epoch: Epoch) -> Option<()> {
-        if self.is_empty() {}
-        unimplemented!()
-    }
-
     /// Consumes `self` and drops the queue it is empty, otherwise returning the
-    /// non-empty queue wrapped in a [`Some`].
+    /// non-empty queue wrapped in a boxed [`SealedQueue`].
     #[inline]
-    fn into_non_empty(self) -> Option<BagQueue> {
-        if self.head.retired_records.len() == 0 && self.head.next.is_none() {
-            None
+    fn into_sealed(self, epoch: Epoch) -> Option<NonNull<SealedQueue>> {
+        if !self.is_empty() {
+            Some(NonNull::from(Box::leak(Box::new(SealedQueue {
+                next: None,
+                seal: epoch,
+                queue: self,
+            }))))
         } else {
-            Some(self)
+            None
         }
     }
-
-    /*/// Seals the [`BagQueue`] with the given [`Epoch`].
-    #[inline]
-    pub fn seal(self, seal: Epoch) -> Box<SealedQueue> {
-        Box::new(SealedQueue { seal, queue: self })
-    }*/
 
     /// # Safety
     ///

@@ -124,6 +124,8 @@ impl Drop for LocalInner {
     #[inline]
     fn drop(&mut self) {
         let bags = unsafe { ManuallyDrop::take(&mut self.bags) };
+        if let Some(sealed) = bags.into_sealed(self.cached_local_epoch) {}
+
         global::ABANDONED.push(bags.into_sealed(self.cached_local_epoch));
     }
 }
