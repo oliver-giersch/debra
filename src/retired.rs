@@ -11,7 +11,7 @@ type Record<T> = reclaim::Record<T, crate::Debra>;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// A type-erased fat pointer to a retired record.
-pub(crate) struct Retired(NonNull<dyn Any + 'static>);
+pub struct Retired(NonNull<dyn Any + 'static>);
 
 impl Retired {
     /// # Safety

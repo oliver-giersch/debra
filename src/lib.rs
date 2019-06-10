@@ -2,8 +2,10 @@
 
 #![feature(manually_drop_take)]
 #![warn(missing_docs)]
+#![cfg_attr(not(any(test, feature = "std")), no_std)]
 
-use core::sync::atomic::Ordering;
+#[cfg(not(feature = "std"))]
+extern crate alloc;
 
 pub use reclaim;
 pub use reclaim::typenum;
@@ -16,17 +18,23 @@ pub type Shared<'g, T, N = U0> = reclaim::Shared<'g, T, Debra, N>;
 pub type Unlinked<T, N = U0> = reclaim::Unlinked<T, Debra, N>;
 pub type Unprotected<T, N = U0> = reclaim::Unprotected<T, Debra, N>;
 
+// FIXME: only if no_std
+pub type LocalGuarded<'a, T, N> = crate::guarded::Guarded<T, N, &'a Local>;
+
 use reclaim::prelude::*;
-use reclaim::{AcquireResult, MarkedPtr};
 use typenum::{Unsigned, U0};
 
+use crate::local::LocalAccess;
 use crate::retired::Retired;
+
+#[cfg(feature = "std")]
+mod default;
 
 mod abandoned;
 mod bag;
-mod default;
 mod epoch;
 mod global;
+mod guarded;
 mod list;
 mod local;
 mod retired;
@@ -37,6 +45,7 @@ mod retired;
 
 pub struct Debra;
 
+/*
 // TODO: Move to default module
 unsafe impl Reclaim for Debra {
     #[inline]
@@ -48,7 +57,7 @@ unsafe impl Reclaim for Debra {
     unsafe fn retire_unchecked<T, N: Unsigned>(unlinked: Unlinked<T, N>) {
         unimplemented!()
     }
-}
+}*/
 
 unsafe impl LocalReclaim for Debra {
     type Local = Local;
@@ -66,49 +75,5 @@ unsafe impl LocalReclaim for Debra {
     ) {
         let unmarked = unlinked.into_marked_non_null().decompose_non_null();
         local.retire_record(Retired::new_unchecked(unmarked));
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Guarded
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-pub struct Guarded<T, N: Unsigned>(T, N);
-
-impl<T, N: Unsigned> Clone for Guarded<T, N> {
-    #[inline]
-    fn clone(&self) -> Self {
-        unimplemented!()
-    }
-}
-
-unsafe impl<T, N: Unsigned> Protect for Guarded<T, N> {
-    type Item = T;
-    type Reclaimer = Debra;
-    type MarkBits = N;
-
-    #[inline]
-    fn marked(&self) -> Marked<Shared<T, N>> {
-        unimplemented!()
-    }
-
-    #[inline]
-    fn acquire(&mut self, atomic: &Atomic<T, N>, order: Ordering) -> Marked<Shared<T, N>> {
-        unimplemented!()
-    }
-
-    #[inline]
-    fn acquire_if_equal(
-        &mut self,
-        atomic: &Atomic<T, N>,
-        expected: MarkedPtr<T, N>,
-        order: Ordering,
-    ) -> AcquireResult<T, Debra, N> {
-        unimplemented!()
-    }
-
-    #[inline]
-    fn release(&mut self) {
-        unimplemented!()
     }
 }

@@ -13,10 +13,24 @@ mod inner;
 use self::inner::LocalInner;
 
 type ThreadEntry = crate::list::ListEntry<ThreadState>;
-type ThreadStateIter = crate::list::Iter<'static, ThreadState>;
 
-#[cfg(all(debug_assertions, not(feature = "no_std")))]
-thread_local!(pub(crate) static IS_RECLAIMING: Cell<bool> = Cell::new(false));
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// LocalAccess (trait)
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// A trait for abstracting over different means for accessing thread local
+/// state.
+pub trait LocalAccess
+where
+    Self: Clone + Copy + Sized,
+{
+    /// Marks the associated thread as active.
+    fn set_active(self);
+    /// Marks the associated thread as inactive.
+    fn set_inactive(self);
+    /// Retires an unlinked record in the thread's current epoch's bag queue.
+    fn retire_record(self, record: Retired);
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Local
@@ -44,10 +58,11 @@ impl Local {
             inner: UnsafeCell::new(LocalInner::new(global_epoch)),
         }
     }
+}
 
-    /// Marks the associated thread as active.
+impl<'a> LocalAccess for &'a Local {
     #[inline]
-    pub(crate) fn set_active(&self) {
+    fn set_active(self) {
         let count = self.guard_count.get();
         if count == 0 {
             let inner = unsafe { &mut *self.inner.get() };
@@ -57,9 +72,8 @@ impl Local {
         self.guard_count.set(count + 1);
     }
 
-    /// Marks the associated thread as inactive.
     #[inline]
-    pub(crate) fn set_inactive(&self) {
+    fn set_inactive(self) {
         let count = self.guard_count.get();
         if count == 1 {
             let inner = unsafe { &*self.inner.get() };
@@ -69,9 +83,8 @@ impl Local {
         self.guard_count.set(count - 1);
     }
 
-    /// Retires an unlinked record in the current epoch's bag queue.
     #[inline]
-    pub(crate) fn retire_record(&self, record: Retired) {
+    fn retire_record(self, record: Retired) {
         let inner = unsafe { &mut *self.inner.get() };
         inner.retire_record(record);
     }

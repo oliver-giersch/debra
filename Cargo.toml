@@ -8,6 +8,12 @@ readme = "README.md"
 repository = "https://github.com/oliver-giersch/debra"
 edition = "2018"
 
+[features]
+default = ["std"]
+
+# disable for use in no_std crates (for limitations see README.md)
+std = ["arrayvec/std", "reclaim/std"]
+
 [dependencies]
 arrayvec = "0.4.10"
 reclaim = { git = "https://github.com/oliver-giersch/reclaim" }

@@ -96,7 +96,7 @@ impl LocalInner {
                     if self.can_advance && self.check_count >= Self::ADVANCE_THRESHOLD {
                         global::EPOCH.compare_and_swap(
                             global_epoch,
-                            global_epoch.increment(),
+                            global_epoch + 1,
                             Ordering::SeqCst,
                         );
                     }
