@@ -12,7 +12,6 @@ type ThreadStateIter = crate::list::Iter<'static, ThreadState>;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // LocalInner
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
 #[derive(Debug)]
 pub(super) struct LocalInner {
     bags: ManuallyDrop<EpochBagQueues>,
@@ -47,20 +46,20 @@ impl LocalInner {
 
         // the global epoch has been advanced, restart all incremental checks
         if global_epoch != self.cached_local_epoch {
+            self.cached_local_epoch = global_epoch;
             self.can_advance = false;
             self.ops_count = 0;
             self.check_count = 0;
             self.thread_iter = global::THREADS.iter();
 
-            self.adopt_and_reclaim();
             unsafe { self.bags.rotate_and_reclaim(&mut self.bag_pool) };
+            self.adopt_and_reclaim();
         }
 
         self.ops_count += 1;
         self.try_advance(thread_state, global_epoch);
 
         thread_state.store(global_epoch, State::Active, Ordering::SeqCst);
-        self.cached_local_epoch = global_epoch;
     }
 
     #[inline]
@@ -108,15 +107,9 @@ impl LocalInner {
 
     #[inline]
     fn adopt_and_reclaim(&mut self) {
-        for queues in global::ABANDONED.pop_all() {
-            for sealed in queues {
-                // let x: SealedQueue = sealed;
-                // if epoch - 2 > sealed.epoch -> reclaim right away
-                // else retire in appropriate bag FIXME: can not do...
-            }
+        for sealed in global::ABANDONED.take_all() {
+            self.bags.retire_sealed(self.cached_local_epoch, sealed, &mut self.bag_pool);
         }
-
-        let mut abandonned = global::ABANDONED.pop_all();
     }
 }
 
@@ -124,9 +117,9 @@ impl Drop for LocalInner {
     #[inline]
     fn drop(&mut self) {
         let bags = unsafe { ManuallyDrop::take(&mut self.bags) };
-        if let Some(sealed) = bags.into_sealed(self.cached_local_epoch) {}
-
-        global::ABANDONED.push(bags.into_sealed(self.cached_local_epoch));
+        if let Some(sealed) = bags.into_sealed(self.cached_local_epoch) {
+            global::ABANDONED.push(sealed);
+        }
     }
 }
 

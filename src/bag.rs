@@ -1,7 +1,7 @@
 use core::mem;
 use core::ptr::NonNull;
 
-use crate::epoch::Epoch;
+use crate::epoch::{Epoch, PossibleAge};
 use crate::retired::Retired;
 
 use arrayvec::{ArrayVec, IntoIter};
@@ -30,19 +30,16 @@ impl EpochBagQueues {
     /// Converts the three bag queues into **up to** three non-empty
     /// [`SealedQueues`].
     #[inline]
-    pub fn into_sealed(
-        self,
-        current_epoch: Epoch,
-    ) -> Option<(NonNull<SealedQueue>, NonNull<SealedQueue>)> {
+    pub fn into_sealed(self, current_epoch: Epoch) -> Option<SealedList> {
         let mut iter: IntoIter<[BagQueue; BAG_QUEUE_COUNT]> = self.into_sorted().into_iter();
         iter.enumerate().filter_map(|(idx, queue)| queue.into_sealed(current_epoch - idx)).fold(
             None,
             |acc, tail| match acc {
-                Some((head, mut prev_tail)) => {
+                Some(SealedList(head, mut prev_tail)) => {
                     unsafe { prev_tail.as_mut().next = Some(tail) };
-                    Some((head, tail))
+                    Some(SealedList(head, tail))
                 }
-                None => Some((tail, tail)),
+                None => Some(SealedList(tail, tail)),
             },
         )
     }
@@ -51,13 +48,35 @@ impl EpochBagQueues {
     #[inline]
     pub fn retire_record(&mut self, record: Retired, bag_pool: &mut BagPool) {
         let curr = &mut self.queues[self.curr_idx];
-        // the head bag is guaranteed to never be full
-        unsafe { curr.head.retired_records.push_unchecked(record) };
-        if curr.head.retired_records.is_full() {
-            let mut old_head = bag_pool.allocate_bag();
-            mem::swap(&mut curr.head, &mut old_head);
-            curr.head.next = Some(old_head);
-        }
+        curr.retire_record(record, bag_pool);
+    }
+
+    /// Retires the given `sealed` in the appropriate epoch queue based on its
+    /// seal or is reclaimed right away, if it is old enough.
+    #[inline]
+    pub fn retire_sealed(
+        &mut self,
+        global_epoch: Epoch,
+        sealed: Box<SealedQueue>,
+        bag_pool: &mut BagPool,
+    ) {
+        match sealed.seal.relative_age(global_epoch) {
+            Ok(age) => {
+                let queue = match age {
+                    PossibleAge::SameEpoch => &mut self.queues[self.curr_idx],
+                    PossibleAge::OneEpoch => {
+                        &mut self.queues[(self.curr_idx + 2) % BAG_QUEUE_COUNT]
+                    }
+                    PossibleAge::TwoEpochs => {
+                        &mut self.queues[(self.curr_idx + 1) % BAG_QUEUE_COUNT]
+                    }
+                };
+
+                let record = unsafe { Retired::new_unchecked(NonNull::from(Box::leak(sealed))) };
+                queue.retire_record(record, bag_pool);
+            }
+            Err(_) => mem::drop(sealed),
+        };
     }
 
     /// Retires the given `record` in the current [`BagQueue`] as the final
@@ -133,15 +152,17 @@ impl BagPool {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug)]
-pub(crate) struct SealedSubList {
-    head: NonNull<SealedQueue>,
-    tail: NonNull<SealedQueue>,
-}
+pub(crate) struct SealedList(NonNull<SealedQueue>, NonNull<SealedQueue>);
 
-impl SealedSubList {
+impl SealedList {
+    #[inline]
+    pub fn into_inner(self) -> (NonNull<SealedQueue>, NonNull<SealedQueue>) {
+        (self.0, self.1)
+    }
+
     #[inline]
     fn new(head: NonNull<SealedQueue>) -> Self {
-        Self { head, tail: head }
+        Self(head, head)
     }
 }
 
@@ -151,7 +172,7 @@ impl SealedSubList {
 
 #[derive(Debug)]
 pub(crate) struct SealedQueue {
-    next: Option<NonNull<SealedQueue>>,
+    pub(crate) next: Option<NonNull<SealedQueue>>,
     seal: Epoch,
     queue: BagQueue,
 }
@@ -197,6 +218,18 @@ impl BagQueue {
         }
     }
 
+    /// Retires the given `record` .
+    #[inline]
+    fn retire_record(&mut self, record: Retired, bag_pool: &mut BagPool) {
+        // the head bag is guaranteed to never be full
+        unsafe { self.head.retired_records.push_unchecked(record) };
+        if self.head.retired_records.is_full() {
+            let mut old_head = bag_pool.allocate_bag();
+            mem::swap(&mut self.head, &mut old_head);
+            self.head.next = Some(old_head);
+        }
+    }
+
     /// # Safety
     ///
     /// It must be ensured that the contents of the queue are at least two
@@ -206,11 +239,24 @@ impl BagQueue {
         let mut node = self.head.next.take();
         while let Some(mut bag) = node {
             node = bag.next.take();
-            for record in bag.retired_records.drain(..) {
+            for mut record in bag.retired_records.drain(..) {
                 record.reclaim();
             }
 
             bag_pool.recycle_bag(bag);
+        }
+    }
+}
+
+impl Drop for BagQueue {
+    #[inline]
+    fn drop(&mut self) {
+        #[cfg(all(debug_assertions, not(feature = "no_std")))]
+        debug_assert!(crate::local::IS_RECLAIMING.with(|cell| cell.get()));
+
+        let mut curr = self.head.next.take();
+        while let Some(mut node) = curr {
+            curr = node.next.take();
         }
     }
 }

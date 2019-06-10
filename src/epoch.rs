@@ -45,6 +45,16 @@ impl Epoch {
     }
 
     #[inline]
+    pub fn relative_age(self, global_epoch: Epoch) -> Result<PossibleAge, Undetermined> {
+        match global_epoch.0.wrapping_sub(self.0) {
+            0 => Ok(PossibleAge::SameEpoch),
+            1 => Ok(PossibleAge::OneEpoch),
+            2 => Ok(PossibleAge::TwoEpochs),
+            _ => Err(Undetermined),
+        }
+    }
+
+    #[inline]
     fn into_inner(self) -> usize {
         self.0
     }
@@ -67,6 +77,19 @@ impl Sub<usize> for Epoch {
         Self(self.0.wrapping_sub(rhs * EPOCH_INCREMENT))
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// RelativeAge
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum PossibleAge {
+    SameEpoch,
+    OneEpoch,
+    TwoEpochs,
+}
+
+pub(crate) struct Undetermined;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // ThreadState

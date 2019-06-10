@@ -7,7 +7,7 @@ use core::sync::atomic::{
     Ordering::{Acquire, Relaxed, Release},
 };
 
-use crate::bag::SealedSubList;
+use crate::bag::{SealedList, SealedQueue};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // AbandonedQueue
@@ -15,7 +15,7 @@ use crate::bag::SealedSubList;
 
 #[derive(Debug)]
 pub(crate) struct AbandonedQueue {
-    head: AtomicPtr<Node>,
+    head: AtomicPtr<SealedQueue>,
 }
 
 impl AbandonedQueue {
@@ -27,14 +27,14 @@ impl AbandonedQueue {
 
     /// Push a new [`SealedEpochBags`] to the front of the queue.
     #[inline]
-    pub fn push(&self, sealed: SealedEpochBags) {
-        let node = Box::leak(Box::new(Node::new(sealed)));
+    pub fn push(&self, sealed: SealedList) {
+        let (head, mut tail) = sealed.into_inner();
 
         loop {
-            let head = self.head.load(Relaxed);
-            node.next = NonNull::new(head);
+            let curr_head = self.head.load(Relaxed);
+            unsafe { tail.as_mut().next = NonNull::new(curr_head) };
 
-            if self.head.compare_exchange_weak(head, node, Release, Relaxed).is_ok() {
+            if self.head.compare_exchange_weak(curr_head, head.as_ptr(), Release, Relaxed).is_ok() {
                 return;
             }
         }
@@ -42,23 +42,23 @@ impl AbandonedQueue {
 
     /// Pops the entire queue, returning an iterator over the popped elements.
     #[inline]
-    pub fn pop_all(&self) -> SealedIter {
-        let queue = NonNull::new(self.head.swap(ptr::null_mut(), Acquire));
-        SealedIter { curr: queue }
+    pub fn take_all(&self) -> Iter {
+        let head = self.head.swap(ptr::null_mut(), Acquire);
+        Iter { curr: NonNull::new(head) }
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// SealedIter
+// Iter
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug)]
-pub(crate) struct SealedIter {
-    curr: Option<NonNull<Node>>,
+pub(crate) struct Iter {
+    curr: Option<NonNull<SealedQueue>>,
 }
 
-impl Iterator for SealedIter {
-    type Item = SealedEpochBags;
+impl Iterator for Iter {
+    type Item = Box<SealedQueue>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -67,24 +67,8 @@ impl Iterator for SealedIter {
                 let curr = Box::from_raw(ptr.as_ptr());
                 self.curr = curr.next;
 
-                curr.sealed
+                curr
             })
         }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Node
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#[derive(Debug)]
-struct Node {
-    sealed: SealedEpochBags,
-    next: Option<NonNull<Node>>,
-}
-
-impl Node {
-    fn new(sealed: SealedEpochBags) -> Self {
-        Self { sealed, next: Option::default() }
     }
 }
