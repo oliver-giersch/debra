@@ -6,7 +6,6 @@ use crate::epoch::{Epoch, State, ThreadState};
 use crate::global;
 use crate::retired::Retired;
 
-type ThreadEntry = crate::list::ListEntry<ThreadState>;
 type ThreadStateIter = crate::list::Iter<'static, ThreadState>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -126,9 +125,5 @@ impl Drop for LocalInner {
 #[inline(always)]
 fn can_advance(global_epoch: Epoch, other: &ThreadState) -> bool {
     let (epoch, is_active) = other.load_decompose(Ordering::SeqCst);
-    if epoch == global_epoch || !is_active {
-        true
-    } else {
-        false
-    }
+    epoch == global_epoch || !is_active
 }

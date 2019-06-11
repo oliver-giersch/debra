@@ -116,7 +116,7 @@ impl<T> List<T> {
     /// Returns an iterator over the set.
     #[inline]
     pub fn iter(&self) -> Iter<T> {
-        Iter(self.iter_inner())
+        Iter::new(self, &self.head)
     }
 
     #[inline]
@@ -243,6 +243,7 @@ impl<'a, T> Iter<'a, T> {
         }
     }
 
+    /// Loads and dereferences the current value of the [`List`]'s head.
     #[inline]
     pub fn load_head(&self, order: Ordering) -> Option<&'a T> {
         unsafe { self.0.head.load(order).as_ref().map(|node| node.elem()) }
@@ -253,7 +254,10 @@ impl<'a, T> Iter<'a, T> {
 // IterError
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// An error that can occur during the iteration of a [`List`].
 pub(crate) enum IterError {
+    /// The iterators current element has been marked for removal and the
+    /// iterator has to restart.
     Retry,
 }
 
@@ -272,37 +276,42 @@ impl<T> Iterator for IterInner<'_, T> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        unsafe {
-            while let Value(curr) = MarkedNonNull::new(self.prev.as_ref().load(Acquire)) {
-                let (curr, curr_tag) = curr.decompose_ref_unbounded();
-                if curr_tag == 0b1 {
-                    self.prev = NonNull::from(self.head);
-                    continue;
-                }
-
-                let curr_next = curr.next();
-                let next = curr_next.load(Acquire);
-
-                if self.prev.as_ref().load(Relaxed) != MarkedPtr::from(curr) {
-                    self.prev = NonNull::from(self.head);
-                    continue;
-                }
-
-                let (next, next_tag) = next.decompose();
-                if next_tag == REMOVE_TAG {
-                    continue;
-                }
-
-                self.prev = NonNull::from(curr_next);
-                return Some(IterPos {
-                    prev: self.prev,
-                    curr: NonNull::from(curr),
-                    next: NonNull::new(next),
-                });
+        while let Value(curr) = unsafe { MarkedNonNull::new(self.prev.as_ref().load(Acquire)) } {
+            let (curr, curr_tag) = unsafe { curr.decompose_ref_unbounded() };
+            if curr_tag == REMOVE_TAG {
+                self.restart();
+                continue;
             }
 
-            None
+            let curr_next = curr.next();
+            let next = curr_next.load(Acquire);
+
+            if unsafe { self.prev.as_ref().load(Relaxed) } != MarkedPtr::from(curr) {
+                self.restart();
+                continue;
+            }
+
+            let (next, next_tag) = next.decompose();
+            if next_tag == REMOVE_TAG {
+                continue;
+            }
+
+            self.prev = NonNull::from(curr_next);
+            return Some(IterPos {
+                prev: self.prev,
+                curr: NonNull::from(curr),
+                next: NonNull::new(next),
+            });
         }
+
+        None
+    }
+}
+
+impl<T> IterInner<'_, T> {
+    #[inline]
+    fn restart(&mut self) {
+        self.prev = NonNull::from(self.head);
     }
 }
 

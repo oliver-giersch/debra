@@ -10,6 +10,7 @@ const QUIESCENT_BIT: usize = 0b1;
 // AtomicEpoch
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// A concurrently accessible [`Epoch`].
 pub(crate) struct AtomicEpoch(AtomicUsize);
 
 impl AtomicEpoch {
@@ -38,6 +39,16 @@ impl AtomicEpoch {
 pub(crate) struct Epoch(usize);
 
 impl Epoch {
+    /// Returns the [`PossibleAge`] of the epoch relative to `global_epoch`.
+    ///
+    /// Since the global epoch is explicitly allowed to wrap around, it is not
+    /// possible to unambiguously determine the relative age of an epoch.
+    /// However, since epochs are monotonically increasing it is certain that
+    /// any previously observed epoch must be older of equal than the global
+    /// epoch.
+    /// Consequently, it is possible to determine if an epoch **could** be
+    /// within the critical range of two epochs, during which reclamation of
+    /// records **must** be avoided, and is in order to be conservative.
     #[inline]
     pub fn relative_age(self, global_epoch: Epoch) -> Result<PossibleAge, Undetermined> {
         match global_epoch.0.wrapping_sub(self.0) {
@@ -76,6 +87,10 @@ impl Sub<usize> for Epoch {
 // PossibleAge
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// The possible age of an epoch in relation to global epoch within a two-epoch
+/// range.
+///
+/// See [`relative_age`][Epoch::relative_age] for more details.
 #[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum PossibleAge {
     SameEpoch,

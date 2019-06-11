@@ -1,4 +1,4 @@
-//! ...
+//! Thread local variables and access abstractions for *std* environments.
 
 use reclaim::{LocalReclaim, Reclaim};
 

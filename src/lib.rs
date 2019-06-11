@@ -1,4 +1,4 @@
-//! TODO: Docs...
+//! DEBRA - Distributed Epoch Based Reclamation
 
 #![feature(manually_drop_take)]
 #![warn(missing_docs)]
@@ -7,15 +7,27 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+use core::fmt;
+
 pub use reclaim;
 pub use reclaim::typenum;
 
 pub use crate::local::Local;
 
+/// A specialization of [`Atomic`][reclaim::Atomic] for the [`Debra`]
+/// reclamation scheme.
 pub type Atomic<T, N = U0> = reclaim::Atomic<T, Debra, N>;
+/// A specialization of [`Owned`][reclaim::Owned] for the [`Debra`]
+/// reclamation scheme.
 pub type Owned<T, N = U0> = reclaim::Owned<T, Debra, N>;
+/// A specialization of [`Shared`][reclaim::Shared] for the [`Debra`]
+/// reclamation scheme.
 pub type Shared<'g, T, N = U0> = reclaim::Shared<'g, T, Debra, N>;
+/// A specialization of [`Unlinked`][reclaim::Unlinked] for the [`Debra`]
+/// reclamation scheme.
 pub type Unlinked<T, N = U0> = reclaim::Unlinked<T, Debra, N>;
+/// A specialization of [`Unprotected`][reclaim::Unprotected] for the [`Debra`]
+/// reclamation scheme.
 pub type Unprotected<T, N = U0> = reclaim::Unprotected<T, Debra, N>;
 
 // FIXME: only if no_std
@@ -43,21 +55,16 @@ mod retired;
 // Debra
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// Distributed epoch based reclamation.
+#[derive(Copy, Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Debra;
 
-/*
-// TODO: Move to default module
-unsafe impl Reclaim for Debra {
+impl fmt::Display for Debra {
     #[inline]
-    unsafe fn retire<T: 'static, N: Unsigned>(unlinked: Unlinked<T, N>) {
-        unimplemented!()
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "distributed epoch based reclamation")
     }
-
-    #[inline]
-    unsafe fn retire_unchecked<T, N: Unsigned>(unlinked: Unlinked<T, N>) {
-        unimplemented!()
-    }
-}*/
+}
 
 unsafe impl LocalReclaim for Debra {
     type Local = Local;

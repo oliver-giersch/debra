@@ -1,4 +1,5 @@
-//! Caching and deferred deletion of type-erased retired records.
+//! Caching and deferred dropping (and deallocating) of type-erased retired
+//! records.
 
 use core::fmt;
 use core::mem;
@@ -32,6 +33,11 @@ impl Retired {
     }
 
     /// Reclaims the retired record.
+    ///
+    /// # Safety
+    ///
+    /// This method must neither be called when another thread could still have
+    /// a reference to the record, nor must it be called more than once.
     #[inline]
     pub unsafe fn reclaim(&mut self) {
         mem::drop(Box::from_raw(self.0.as_ptr()));

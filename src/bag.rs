@@ -60,23 +60,18 @@ impl EpochBagQueues {
         sealed: Box<SealedQueue>,
         bag_pool: &mut BagPool,
     ) {
-        match sealed.seal.relative_age(global_epoch) {
-            Ok(age) => {
-                let queue = match age {
-                    PossibleAge::SameEpoch => &mut self.queues[self.curr_idx],
-                    PossibleAge::OneEpoch => {
-                        &mut self.queues[(self.curr_idx + 2) % BAG_QUEUE_COUNT]
-                    }
-                    PossibleAge::TwoEpochs => {
-                        &mut self.queues[(self.curr_idx + 1) % BAG_QUEUE_COUNT]
-                    }
-                };
+        if let Ok(age) = sealed.seal.relative_age(global_epoch) {
+            let queue = match age {
+                PossibleAge::SameEpoch => &mut self.queues[self.curr_idx],
+                PossibleAge::OneEpoch => &mut self.queues[(self.curr_idx + 2) % BAG_QUEUE_COUNT],
+                PossibleAge::TwoEpochs => &mut self.queues[(self.curr_idx + 1) % BAG_QUEUE_COUNT],
+            };
 
-                let record = unsafe { Retired::new_unchecked(NonNull::from(Box::leak(sealed))) };
-                queue.retire_record(record, bag_pool);
-            }
-            Err(_) => mem::drop(sealed),
-        };
+            let record = unsafe { Retired::new_unchecked(NonNull::from(Box::leak(sealed))) };
+            queue.retire_record(record, bag_pool);
+        } else {
+            mem::drop(sealed);
+        }
     }
 
     /// Retires the given `record` in the current [`BagQueue`] as the final
@@ -135,7 +130,7 @@ impl BagPool {
 
     #[inline]
     fn allocate_bag(&mut self) -> Box<BagNode> {
-        self.0.pop().unwrap_or_else(|| BagNode::boxed())
+        self.0.pop().unwrap_or_else(BagNode::boxed)
     }
 
     #[inline]
@@ -148,7 +143,7 @@ impl BagPool {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// SealedQueue
+// SealedList
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug)]
@@ -158,11 +153,6 @@ impl SealedList {
     #[inline]
     pub fn into_inner(self) -> (NonNull<SealedQueue>, NonNull<SealedQueue>) {
         (self.0, self.1)
-    }
-
-    #[inline]
-    fn new(head: NonNull<SealedQueue>) -> Self {
-        Self(head, head)
     }
 }
 
@@ -251,9 +241,6 @@ impl BagQueue {
 impl Drop for BagQueue {
     #[inline]
     fn drop(&mut self) {
-        #[cfg(all(debug_assertions, not(feature = "no_std")))]
-        debug_assert!(crate::local::IS_RECLAIMING.with(|cell| cell.get()));
-
         let mut curr = self.head.next.take();
         while let Some(mut node) = curr {
             curr = node.next.take();

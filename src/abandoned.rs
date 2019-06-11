@@ -13,6 +13,8 @@ use crate::bag::{SealedList, SealedQueue};
 // AbandonedQueue
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// A LIFO-queue (stack) that allows concurrent push and pop operations, which
+/// take the entire content of the stack at once.
 #[derive(Debug)]
 pub(crate) struct AbandonedQueue {
     head: AtomicPtr<SealedQueue>,

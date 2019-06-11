@@ -11,7 +11,7 @@ use crate::{Atomic, Debra, Shared};
 // Guarded
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub(crate) struct Guarded<T, N: Unsigned, L: LocalAccess> {
+pub struct Guarded<T, N: Unsigned, L: LocalAccess> {
     marked: Marked<MarkedNonNull<T, N>>,
     local_access: L,
 }
@@ -59,6 +59,10 @@ unsafe impl<T, N: Unsigned, L: LocalAccess> Protect for Guarded<T, N, L> {
 
     #[inline]
     fn release(&mut self) {
-        unimplemented!()
+        if !self.marked.is_null() {
+            self.local_access.set_inactive();
+        }
+
+        self.marked = Null(0);
     }
 }
