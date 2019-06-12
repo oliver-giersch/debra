@@ -36,6 +36,7 @@ impl AbandonedQueue {
             let curr_head = self.head.load(Relaxed);
             unsafe { tail.as_mut().next = NonNull::new(curr_head) };
 
+            // (ABA:1) this `Release` CAS synchronizes-with the `Acquire` swap (ABA:2)
             if self.head.compare_exchange_weak(curr_head, head.as_ptr(), Release, Relaxed).is_ok() {
                 return;
             }
@@ -45,6 +46,7 @@ impl AbandonedQueue {
     /// Pops the entire queue, returning an iterator over the popped elements.
     #[inline]
     pub fn take_all(&self) -> Iter {
+        // (ABA:2) this `Acquire` swap synchronizes-with the `Release` CAS (ABA:1)
         let head = self.head.swap(ptr::null_mut(), Acquire);
         Iter { curr: NonNull::new(head) }
     }

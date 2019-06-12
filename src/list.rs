@@ -57,6 +57,9 @@ impl<T> List<T> {
 
                 let next = MarkedPtr::new(next.unwrap_ptr());
                 entry.next().store(next, Relaxed);
+
+                // (LIS:1) this `Release` CAS synchronizes-with the `Acquire` loads (INN:3), (INN:4),
+                // (LIS:4), (LIS:5) and the `Acquire` CAS (LIS:2)
                 if prev
                     .as_ref()
                     .compare_exchange(next, MarkedPtr::new(entry), Release, Relaxed)
@@ -91,6 +94,7 @@ impl<T> List<T> {
                 let next_unmarked = MarkedPtr::new(pos.next.unwrap_ptr());
                 let next_marked = MarkedPtr::compose(pos.next.unwrap_ptr(), REMOVE_TAG);
 
+                // (LIS:2) this `Acquire` CAS synchronizes-with the `Release` CAS (LIS:1) and (LIS:3)
                 if pos
                     .curr
                     .as_ref()
@@ -101,6 +105,8 @@ impl<T> List<T> {
                     continue;
                 }
 
+                // (LIS:3) this `Release` CAS synchronizes-with the `Acquire` loads (INN:3), (INN:4),
+                // (LIS:4), (LIS:5) and the `Acquire` CAS (LIS:2)
                 if pos
                     .prev
                     .as_ref()
@@ -276,6 +282,7 @@ impl<T> Iterator for IterInner<'_, T> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
+        // (LIS:4) this `Acquire` load synchronizes-with the the `Release` CAS (LIS:1) and (LIS:3)
         while let Value(curr) = unsafe { MarkedNonNull::new(self.prev.as_ref().load(Acquire)) } {
             let (curr, curr_tag) = unsafe { curr.decompose_ref_unbounded() };
             if curr_tag == REMOVE_TAG {
@@ -284,6 +291,7 @@ impl<T> Iterator for IterInner<'_, T> {
             }
 
             let curr_next = curr.next();
+            // (LIS:5) this `Acquire` load synchronizes-with the `Release` CAS (LIS:1) and (LIS:3)
             let next = curr_next.load(Acquire);
 
             if unsafe { self.prev.as_ref().load(Relaxed) } != MarkedPtr::from(curr) {
