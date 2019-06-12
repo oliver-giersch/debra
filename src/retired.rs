@@ -5,6 +5,9 @@ use core::fmt;
 use core::mem;
 use core::ptr::NonNull;
 
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+
 type Record<T> = reclaim::Record<T, crate::Debra>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

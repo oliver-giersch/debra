@@ -1,6 +1,9 @@
 use core::mem;
 use core::ptr::NonNull;
 
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+
 use crate::epoch::{Epoch, PossibleAge};
 use crate::retired::Retired;
 
@@ -31,7 +34,7 @@ impl EpochBagQueues {
     /// [`SealedQueues`].
     #[inline]
     pub fn into_sealed(self, current_epoch: Epoch) -> Option<SealedList> {
-        let mut iter: IntoIter<[BagQueue; BAG_QUEUE_COUNT]> = self.into_sorted().into_iter();
+        let iter: IntoIter<[BagQueue; BAG_QUEUE_COUNT]> = self.into_sorted().into_iter();
         iter.enumerate().filter_map(|(idx, queue)| queue.into_sealed(current_epoch - idx)).fold(
             None,
             |acc, tail| match acc {

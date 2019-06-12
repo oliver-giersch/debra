@@ -16,4 +16,5 @@ std = ["arrayvec/std", "reclaim/std"]
 
 [dependencies]
 arrayvec = "0.4.10"
+cfg-if = "0.1.9"
 reclaim = { git = "https://github.com/oliver-giersch/reclaim" }

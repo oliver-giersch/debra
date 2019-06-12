@@ -3,7 +3,7 @@ use core::sync::atomic::Ordering;
 use reclaim::prelude::*;
 use reclaim::{AcquireResult, MarkedNonNull, MarkedPtr};
 
-use crate::local::LocalAccess;
+use crate::local::{Local, LocalAccess};
 use crate::typenum::Unsigned;
 use crate::{Atomic, Debra, Shared};
 
@@ -21,6 +21,15 @@ impl<T, N: Unsigned, L: LocalAccess> Guarded<T, N, L> {
     #[inline]
     pub fn with_local_access(local_access: L) -> Self {
         Self { marked: Null(0), local_access }
+    }
+}
+
+impl<'a, T, N: Unsigned> Guarded<T, N, &'a Local> {
+    /// Creates a new [`Guarded`] with the given reference to thread local
+    /// [`Local`] state.
+    #[inline]
+    pub fn new(local_access: &'a Local) -> Self {
+        Self::with_local_access(local_access)
     }
 }
 
@@ -58,9 +67,9 @@ unsafe impl<T, N: Unsigned, L: LocalAccess> Protect for Guarded<T, N, L> {
     #[inline]
     fn acquire_if_equal(
         &mut self,
-        atomic: &Atomic<T, N>,
-        expected: MarkedPtr<T, N>,
-        order: Ordering,
+        _atomic: &Atomic<T, N>,
+        _expected: MarkedPtr<T, N>,
+        _order: Ordering,
     ) -> AcquireResult<T, Debra, N> {
         unimplemented!()
     }

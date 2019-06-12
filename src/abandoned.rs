@@ -7,6 +7,9 @@ use core::sync::atomic::{
     Ordering::{Acquire, Relaxed, Release},
 };
 
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+
 use crate::bag::{SealedList, SealedQueue};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

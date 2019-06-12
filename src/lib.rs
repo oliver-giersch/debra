@@ -12,8 +12,6 @@ use core::fmt;
 pub use reclaim;
 pub use reclaim::typenum;
 
-pub use crate::local::Local;
-
 /// A specialization of [`Atomic`][reclaim::Atomic] for the [`Debra`]
 /// reclamation scheme.
 pub type Atomic<T, N = U0> = reclaim::Atomic<T, Debra, N>;
@@ -30,9 +28,21 @@ pub type Unlinked<T, N = U0> = reclaim::Unlinked<T, Debra, N>;
 /// reclamation scheme.
 pub type Unprotected<T, N = U0> = reclaim::Unprotected<T, Debra, N>;
 
-// FIXME: only if no_std
-pub type LocalGuarded<'a, T, N> = crate::guarded::Guarded<T, N, &'a Local>;
+pub use crate::local::Local;
 
+cfg_if! {
+    if #[cfg(feature = "std")] {
+        /// A guarded pointer that implements the [`Protect`][reclaim::Protect]
+        /// trait.
+        pub type Guarded<T, N = U0> = crate::guarded::Guarded<T, N, crate::default::DefaultAccess>;
+    } else {
+        /// A guarded pointer that implements the [`Protect`][reclaim::Protect]
+        /// trait.
+        pub type LocalGuarded<'a, T, N> = crate::guarded::Guarded<T, N, &'a Local>;
+    }
+}
+
+use cfg_if::cfg_if;
 use reclaim::prelude::*;
 use typenum::{Unsigned, U0};
 

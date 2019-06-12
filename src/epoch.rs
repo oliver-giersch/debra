@@ -2,7 +2,6 @@
 
 use core::ops::{Add, Sub};
 use core::sync::atomic::{AtomicUsize, Ordering};
-use std::io::SeekFrom::Start;
 
 const EPOCH_INCREMENT: usize = 2;
 const QUIESCENT_BIT: usize = 0b1;
