@@ -16,6 +16,14 @@ pub struct Guarded<T, N: Unsigned, L: LocalAccess> {
     local_access: L,
 }
 
+impl<T, N: Unsigned, L: LocalAccess> Guarded<T, N, L> {
+    /// Creates a new [`Guarded`] with the given `local_access`.
+    #[inline]
+    pub fn with_local_access(local_access: L) -> Self {
+        Self { marked: Null(0), local_access }
+    }
+}
+
 impl<T, N: Unsigned, L: LocalAccess> Clone for Guarded<T, N, L> {
     #[inline]
     fn clone(&self) -> Self {

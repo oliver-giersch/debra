@@ -2,6 +2,7 @@
 
 use reclaim::{LocalReclaim, Reclaim};
 
+use crate::guarded::Guarded;
 use crate::local::{Local, LocalAccess};
 use crate::retired::Retired;
 use crate::typenum::Unsigned;
@@ -22,6 +23,24 @@ unsafe impl Reclaim for Debra {
     #[inline]
     unsafe fn retire_unchecked<T, N: Unsigned>(unlinked: Unlinked<T, N>) {
         LOCAL.with(move |local| Self::retire_local_unchecked(local, unlinked));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Guarded
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+impl<T, N: Unsigned> Guarded<T, N, DefaultAccess> {
+    #[inline]
+    pub fn new() -> Self {
+        Self::with_local_access(DefaultAccess)
+    }
+}
+
+impl<T, N: Unsigned> Default for Guarded<T, N, DefaultAccess> {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
     }
 }
 
