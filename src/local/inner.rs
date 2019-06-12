@@ -129,7 +129,7 @@ impl Drop for LocalInner {
 #[inline(always)]
 fn can_advance(global_epoch: Epoch, other: &ThreadState) -> bool {
     // (INN:7) this `SeqCst` load synchronizes-with the `SeqCst` stores (INN:2) and (INN:3),
-    // establishing
-    let (epoch, is_active) = other.load_decompose(SeqCst);
-    epoch == global_epoch || !is_active
+    // establishing a total order of all operations on `ThreadState` values.
+    let (epoch, state) = other.load_decompose(SeqCst);
+    epoch == global_epoch || state == State::Quiescent
 }

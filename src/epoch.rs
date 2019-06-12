@@ -2,6 +2,7 @@
 
 use core::ops::{Add, Sub};
 use core::sync::atomic::{AtomicUsize, Ordering};
+use std::io::SeekFrom::Start;
 
 const EPOCH_INCREMENT: usize = 2;
 const QUIESCENT_BIT: usize = 0b1;
@@ -14,11 +15,13 @@ const QUIESCENT_BIT: usize = 0b1;
 pub(crate) struct AtomicEpoch(AtomicUsize);
 
 impl AtomicEpoch {
+    /// Creates a new [`AtomicEpoch`] starting at zero.
     #[inline]
     pub const fn new() -> Self {
         Self(AtomicUsize::new(0))
     }
 
+    /// Loads the epoch with the specified `order`.
     #[inline]
     pub fn load(&self, order: Ordering) -> Epoch {
         Epoch(self.0.load(order))
@@ -125,9 +128,9 @@ impl ThreadState {
     }
 
     #[inline]
-    pub fn load_decompose(&self, order: Ordering) -> (Epoch, bool) {
+    pub fn load_decompose(&self, order: Ordering) -> (Epoch, State) {
         let state = self.0.load(order);
-        (Epoch(state & !QUIESCENT_BIT), state & QUIESCENT_BIT == 0)
+        (Epoch(state & !QUIESCENT_BIT), State::from(state & QUIESCENT_BIT == 0))
     }
 
     #[inline]
@@ -147,4 +150,14 @@ impl ThreadState {
 pub(crate) enum State {
     Active,
     Quiescent,
+}
+
+impl From<bool> for State {
+    #[inline]
+    fn from(state: bool) -> Self {
+        match state {
+            true => State::Active,
+            false => State::Quiescent,
+        }
+    }
 }
