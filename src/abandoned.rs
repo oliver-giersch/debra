@@ -46,7 +46,7 @@ impl AbandonedQueue {
         }
     }
 
-    /// Pops the entire queue, returning an iterator over the popped elements.
+    /// Pops the entire queue, returning an [`Iter`] over the popped elements.
     #[inline]
     pub fn take_all(&self) -> Iter {
         // (ABA:2) this `Acquire` swap synchronizes-with the `Release` CAS (ABA:1)
@@ -59,6 +59,8 @@ impl AbandonedQueue {
 // Iter
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// An iterator over the results of a [`take_all`][AbandonedQueue::take_all]
+/// call.
 #[derive(Debug)]
 pub(crate) struct Iter {
     curr: Option<NonNull<Sealed>>,

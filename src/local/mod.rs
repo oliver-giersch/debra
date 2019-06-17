@@ -2,36 +2,21 @@
 
 use core::cell::{Cell, UnsafeCell};
 use core::mem::ManuallyDrop;
+use core::ptr;
 use core::sync::atomic::Ordering;
 
 use debra_common::thread::ThreadState;
+use debra_common::LocalAccess;
 
 use crate::global;
+use crate::Debra;
 
 mod inner;
 
 use self::inner::LocalInner;
 
 type ThreadEntry = crate::list::ListEntry<ThreadState>;
-type Retired = reclaim::Retired<crate::Debra>;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// LocalAccess (trait)
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// A trait for abstracting over different means for accessing thread local
-/// state.
-pub trait LocalAccess
-where
-    Self: Clone + Copy + Sized,
-{
-    /// Marks the associated thread as active.
-    fn set_active(self);
-    /// Marks the associated thread as inactive.
-    fn set_inactive(self);
-    /// Retires an unlinked record in the thread's current epoch's bag queue.
-    fn retire_record(self, record: Retired);
-}
+type Retired = reclaim::Retired<Debra>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Local
@@ -62,6 +47,8 @@ impl Local {
 }
 
 impl<'a> LocalAccess for &'a Local {
+    type Reclaimer = Debra;
+
     #[inline]
     fn set_active(self) {
         let count = self.guard_count.get();
@@ -101,7 +88,7 @@ impl Default for Local {
 impl Drop for Local {
     #[inline]
     fn drop(&mut self) {
-        let state = unsafe { ManuallyDrop::take(&mut self.state) };
+        let state = unsafe { take_manually_drop(&mut self.state) };
         let entry = global::THREADS.remove(state);
 
         unsafe {
@@ -110,4 +97,14 @@ impl Drop for Local {
             inner.retire_final_record(retired);
         }
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// helper functions
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// this helper function can be removed when `ManuallyDrop::take` becomes stable
+#[inline]
+unsafe fn take_manually_drop<T>(slot: &mut ManuallyDrop<T>) -> T {
+    ManuallyDrop::into_inner(ptr::read(slot))
 }

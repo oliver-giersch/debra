@@ -1,6 +1,5 @@
 //! DEBRA - Distributed Epoch Based Reclamation
 
-#![feature(manually_drop_take)]
 #![warn(missing_docs)]
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
 
@@ -43,10 +42,9 @@ cfg_if! {
 }
 
 use cfg_if::cfg_if;
+use debra_common::LocalAccess;
 use reclaim::prelude::*;
 use typenum::{Unsigned, U0};
-
-use crate::local::LocalAccess;
 
 type Retired = reclaim::Retired<Debra>;
 

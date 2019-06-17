@@ -39,9 +39,10 @@ impl<T> List<T> {
         Self { head: AtomicMarkedPtr::null() }
     }
 
-    /// Inserts the given `entry` and returns an owned [`SetEntry`] token, which
-    /// can be used to remove the entry and also acts like a shared reference to
-    /// it.
+    /// Inserts the given `entry` and returns an owned [`SetEntry`] token.
+    ///
+    /// The returned token is the only way, by which an entry can be removed
+    /// from the list again and also acts like a shared reference to the entry.
     ///
     /// Every entry is allocated as part of a [`Node`] on the heap and all
     /// entries are ordered by their respective heap addresses.

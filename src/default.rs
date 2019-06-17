@@ -1,9 +1,10 @@
 //! Thread local variables and access abstractions for *std* environments.
 
+use debra_common::LocalAccess;
 use reclaim::{LocalReclaim, Reclaim};
 
 use crate::guarded::Guarded;
-use crate::local::{Local, LocalAccess};
+use crate::local::Local;
 use crate::retired::Retired;
 use crate::typenum::Unsigned;
 use crate::{Debra, Unlinked};
@@ -52,6 +53,8 @@ impl<T, N: Unsigned> Default for Guarded<T, N, DefaultAccess> {
 pub struct DefaultAccess;
 
 impl LocalAccess for DefaultAccess {
+    type Reclaimer = Debra;
+
     #[inline]
     fn set_active(self) {
         LOCAL.with(|local| local.set_active());

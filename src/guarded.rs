@@ -1,9 +1,10 @@
 use core::sync::atomic::Ordering;
 
+use debra_common::LocalAccess;
 use reclaim::prelude::*;
 use reclaim::{AcquireResult, MarkedNonNull, MarkedPtr};
 
-use crate::local::{Local, LocalAccess};
+use crate::local::Local;
 use crate::typenum::Unsigned;
 use crate::{Atomic, Debra, Shared};
 
