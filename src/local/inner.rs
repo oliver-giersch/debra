@@ -1,16 +1,25 @@
-use core::mem::ManuallyDrop;
+use core::mem::{self, ManuallyDrop};
+use core::ptr::NonNull;
 use core::sync::atomic::Ordering::{Acquire, Release, SeqCst};
 
-use crate::bag::{BagPool, EpochBagQueues};
-use crate::epoch::{Epoch, State, ThreadState};
-use crate::global;
-use crate::retired::Retired;
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
 
+use debra_common::epoch::Epoch;
+use debra_common::thread::{State, ThreadState};
+
+use crate::global;
+use crate::sealed::SealedList;
+
+type BagPool = debra_common::bag::BagPool<crate::Debra>;
+type EpochBagQueues = debra_common::bag::EpochBagQueues<crate::Debra>;
 type ThreadStateIter = crate::list::Iter<'static, ThreadState>;
+type Retired = reclaim::Retired<crate::Debra>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // LocalInner
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
 #[derive(Debug)]
 pub(super) struct LocalInner {
     bags: ManuallyDrop<EpochBagQueues>,
@@ -68,7 +77,7 @@ impl LocalInner {
     pub fn set_inactive(&self, thread_state: &ThreadState) {
         // (INN:3) this `SeqCst` store synchronizes-with the `SeqCst` load (INN:7), establishing a
         // total order of all operations on `ThreadState` values.
-        thread_state.store(self.cached_local_epoch, State::Quiescent, SeqCst);
+        thread_state.store(self.cached_local_epoch, State::Inactive, SeqCst);
     }
 
     #[inline]
@@ -86,7 +95,7 @@ impl LocalInner {
         if self.ops_count >= Self::CHECK_THRESHOLD {
             self.ops_count = 0;
 
-            // (INN:4) this `Acquire` load the `Release` CAS (LIS:1) and (LIS:3)
+            // (INN:4) this `Acquire` load synchronizes-with the `Release` CAS (LIS:1) and (LIS:3)
             if let Ok(curr) = self.thread_iter.load_current(Acquire) {
                 let other = curr.unwrap_or_else(|| {
                     self.can_advance = true;
@@ -111,7 +120,12 @@ impl LocalInner {
     #[inline]
     fn adopt_and_reclaim(&mut self) {
         for sealed in global::ABANDONED.take_all() {
-            self.bags.retire_sealed(self.cached_local_epoch, sealed, &mut self.bag_pool);
+            if let Ok(age) = sealed.seal.relative_age(self.cached_local_epoch) {
+                let retired = unsafe { Retired::new_unchecked(NonNull::from(Box::leak(sealed))) };
+                self.bags.retire_record_by_age(retired, age, &mut self.bag_pool);
+            } else {
+                mem::drop(sealed);
+            }
         }
     }
 }
@@ -120,7 +134,7 @@ impl Drop for LocalInner {
     #[inline]
     fn drop(&mut self) {
         let bags = unsafe { ManuallyDrop::take(&mut self.bags) };
-        if let Some(sealed) = bags.into_sealed(self.cached_local_epoch) {
+        if let Some(sealed) = SealedList::try_from_epoch_bags(bags, self.cached_local_epoch) {
             global::ABANDONED.push(sealed);
         }
     }
@@ -130,6 +144,6 @@ impl Drop for LocalInner {
 fn can_advance(global_epoch: Epoch, other: &ThreadState) -> bool {
     // (INN:7) this `SeqCst` load synchronizes-with the `SeqCst` stores (INN:2) and (INN:3),
     // establishing a total order of all operations on `ThreadState` values.
-    let (epoch, state) = other.load_decompose(SeqCst);
-    epoch == global_epoch || state == State::Quiescent
+    let (epoch, state) = other.load(SeqCst);
+    epoch == global_epoch || state == State::Inactive
 }

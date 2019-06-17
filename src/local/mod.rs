@@ -4,15 +4,16 @@ use core::cell::{Cell, UnsafeCell};
 use core::mem::ManuallyDrop;
 use core::sync::atomic::Ordering;
 
-use crate::epoch::ThreadState;
+use debra_common::thread::ThreadState;
+
 use crate::global;
-use crate::retired::Retired;
 
 mod inner;
 
 use self::inner::LocalInner;
 
 type ThreadEntry = crate::list::ListEntry<ThreadState>;
+type Retired = reclaim::Retired<crate::Debra>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // LocalAccess (trait)

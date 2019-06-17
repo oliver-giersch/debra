@@ -10,7 +10,7 @@ use core::sync::atomic::{
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
 
-use crate::bag::{SealedList, SealedQueue};
+use crate::sealed::{Sealed, SealedList};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // AbandonedQueue
@@ -20,7 +20,7 @@ use crate::bag::{SealedList, SealedQueue};
 /// take the entire content of the stack at once.
 #[derive(Debug)]
 pub(crate) struct AbandonedQueue {
-    head: AtomicPtr<SealedQueue>,
+    head: AtomicPtr<Sealed>,
 }
 
 impl AbandonedQueue {
@@ -61,11 +61,11 @@ impl AbandonedQueue {
 
 #[derive(Debug)]
 pub(crate) struct Iter {
-    curr: Option<NonNull<SealedQueue>>,
+    curr: Option<NonNull<Sealed>>,
 }
 
 impl Iterator for Iter {
-    type Item = Box<SealedQueue>;
+    type Item = Box<Sealed>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {

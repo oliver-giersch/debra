@@ -1,7 +1,9 @@
 //! The global static epoch counter
 
+use debra_common::epoch::AtomicEpoch;
+use debra_common::thread::ThreadState;
+
 use crate::abandoned::AbandonedQueue;
-use crate::epoch::{AtomicEpoch, ThreadState};
 use crate::list::List;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

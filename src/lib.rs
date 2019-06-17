@@ -47,19 +47,18 @@ use reclaim::prelude::*;
 use typenum::{Unsigned, U0};
 
 use crate::local::LocalAccess;
-use crate::retired::Retired;
+
+type Retired = reclaim::Retired<Debra>;
 
 #[cfg(feature = "std")]
 mod default;
 
 mod abandoned;
-mod bag;
-mod epoch;
 mod global;
 mod guarded;
 mod list;
 mod local;
-mod retired;
+mod sealed;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Debra
