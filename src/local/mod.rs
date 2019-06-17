@@ -1,5 +1,7 @@
 //! Thread local state
 
+mod inner;
+
 use core::cell::{Cell, UnsafeCell};
 use core::mem::ManuallyDrop;
 use core::ptr;
@@ -10,8 +12,6 @@ use debra_common::LocalAccess;
 
 use crate::global;
 use crate::Debra;
-
-mod inner;
 
 use self::inner::LocalInner;
 

@@ -6,10 +6,22 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+#[cfg(feature = "std")]
+mod default;
+
+mod abandoned;
+mod global;
+mod guarded;
+mod list;
+mod local;
+mod sealed;
+
 use core::fmt;
 
 pub use reclaim;
 pub use reclaim::typenum;
+
+pub use crate::local::Local;
 
 /// A specialization of [`Atomic`][reclaim::Atomic] for the [`Debra`]
 /// reclamation scheme.
@@ -26,8 +38,6 @@ pub type Unlinked<T, N = U0> = reclaim::Unlinked<T, Debra, N>;
 /// A specialization of [`Unprotected`][reclaim::Unprotected] for the [`Debra`]
 /// reclamation scheme.
 pub type Unprotected<T, N = U0> = reclaim::Unprotected<T, Debra, N>;
-
-pub use crate::local::Local;
 
 cfg_if! {
     if #[cfg(feature = "std")] {
@@ -47,16 +57,6 @@ use reclaim::prelude::*;
 use typenum::{Unsigned, U0};
 
 type Retired = reclaim::Retired<Debra>;
-
-#[cfg(feature = "std")]
-mod default;
-
-mod abandoned;
-mod global;
-mod guarded;
-mod list;
-mod local;
-mod sealed;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Debra
