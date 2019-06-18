@@ -2,6 +2,7 @@
 //! entries and does not deallocate memory of entries removed during its
 //! lifetime.
 
+use core::marker::PhantomData;
 use core::mem;
 use core::ops::Deref;
 use core::ptr::{self, NonNull};
@@ -20,10 +21,11 @@ type AtomicMarkedPtr<T> = reclaim::AtomicMarkedPtr<T, U1>;
 const REMOVE_TAG: usize = 0b1;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Queue
+// List
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// A concurrent lock-free list with restricted permissions for entry removal.
+/// A concurrent lock-free list with restricted permissions for removal of
+/// entries.
 ///
 /// Each entry in the queue is associated to an owner, represented by a
 /// [`SetEntry`]. Only this owner can remove the entry again from the queue,
@@ -43,31 +45,19 @@ impl<T> List<T> {
     ///
     /// The returned token is the only way, by which an entry can be removed
     /// from the list again and also acts like a shared reference to the entry.
-    ///
-    /// Every entry is allocated as part of a [`Node`] on the heap and all
-    /// entries are ordered by their respective heap addresses.
     #[inline]
     pub fn insert(&self, entry: T) -> ListEntry<T> {
-        unsafe {
-            let entry = Box::leak(Box::new(Node::new(entry)));
-            loop {
-                let mut iter = self.iter_inner();
-                let InsertPos(prev, next) = iter
-                    .find_map(|pos| pos.check_ordered_insert(entry))
-                    .unwrap_or_else(|| InsertPos(iter.prev, None));
+        let entry = Box::leak(Box::new(Node::new(entry)));
+        loop {
+            let head = self.head.load(Acquire);
+            entry.next().store(head, Relaxed);
 
-                let next = MarkedPtr::new(next.unwrap_ptr());
-                entry.next().store(next, Relaxed);
-
-                // (LIS:1) this `Release` CAS synchronizes-with the `Acquire` loads (INN:3), (INN:4),
-                // (LIS:4), (LIS:5) and the `Acquire` CAS (LIS:2)
-                if prev
-                    .as_ref()
-                    .compare_exchange(next, MarkedPtr::new(entry), Release, Relaxed)
-                    .is_ok()
-                {
-                    return ListEntry(NonNull::from(entry));
-                }
+            if self
+                .head
+                .compare_exchange_weak(head, MarkedPtr::new(entry), Release, Relaxed)
+                .is_ok()
+            {
+                return ListEntry(NonNull::from(entry), PhantomData);
             }
         }
     }
@@ -85,47 +75,37 @@ impl<T> List<T> {
     #[inline]
     pub fn remove(&self, entry: ListEntry<T>) -> NonNull<Node<T>> {
         let entry = entry.into_inner();
-        unsafe {
-            loop {
-                let pos = self
-                    .iter_inner()
-                    .find(|pos| pos.curr == entry)
-                    .expect("given `entry` does not exist in this set");
+        loop {
+            let pos = self
+                .iter_inner()
+                .find(|pos| pos.curr == entry)
+                .expect("given `entry` does not exist in this set");
 
-                let next_unmarked = MarkedPtr::new(pos.next.unwrap_ptr());
-                let next_marked = MarkedPtr::compose(pos.next.unwrap_ptr(), REMOVE_TAG);
+            let prev = unsafe { pos.prev.as_ref() };
+            let curr = unsafe { pos.curr.as_ref() };
+            let next = MarkedPtr::new(pos.next.unwrap_ptr());
+            let next_marked = MarkedPtr::compose(pos.next.unwrap_ptr(), REMOVE_TAG);
 
-                // (LIS:2) this `Acquire` CAS synchronizes-with the `Release` CAS (LIS:1) and (LIS:3)
-                if pos
-                    .curr
-                    .as_ref()
-                    .next
-                    .compare_exchange(next_unmarked, next_marked, Acquire, Relaxed)
-                    .is_err()
-                {
-                    continue;
-                }
+            // (LIS:2) this `Acquire` CAS synchronizes-with the `Release` CAS (LIS:1) and (LIS:3)
+            if curr.next.compare_exchange(next, next_marked, Acquire, Relaxed).is_err() {
+                continue;
+            }
 
-                // (LIS:3) this `Release` CAS synchronizes-with the `Acquire` loads (INN:3), (INN:4),
-                // (LIS:4), (LIS:5) and the `Acquire` CAS (LIS:2)
-                if pos
-                    .prev
-                    .as_ref()
-                    .compare_exchange(MarkedPtr::from(pos.curr), next_unmarked, Release, Relaxed)
-                    .is_ok()
-                {
-                    return entry;
-                }
+            // (LIS:3) this `Release` CAS synchronizes-with the `Acquire` loads (INN:3), (INN:4),
+            // (LIS:4), (LIS:5) and the `Acquire` CAS (LIS:2)
+            if prev.compare_exchange(MarkedPtr::from(curr), next, Release, Relaxed).is_ok() {
+                return entry;
             }
         }
     }
 
-    /// Returns an iterator over the set.
+    /// Returns an iterator over the list.
     #[inline]
     pub fn iter(&self) -> Iter<T> {
         Iter::new(self, &self.head)
     }
 
+    /// Returns an internal iterator over the list.
     #[inline]
     fn iter_inner(&self) -> IterInner<T> {
         IterInner { head: &self.head, prev: NonNull::from(&self.head) }
@@ -152,9 +132,9 @@ impl<T> Drop for List<T> {
 /// A token representing ownership of an entry in a [`List`]
 #[derive(Debug)]
 #[must_use]
-pub(crate) struct ListEntry<T>(NonNull<Node<T>>);
+pub(crate) struct ListEntry<'a, T>(NonNull<Node<T>>, PhantomData<&'a List<T>>);
 
-impl<T> ListEntry<T> {
+impl<T> ListEntry<'_, T> {
     #[inline]
     fn into_inner(self) -> NonNull<Node<T>> {
         let inner = self.0;
@@ -163,7 +143,7 @@ impl<T> ListEntry<T> {
     }
 }
 
-impl<T> Deref for ListEntry<T> {
+impl<T> Deref for ListEntry<'_, T> {
     type Target = T;
 
     #[inline]
@@ -173,7 +153,7 @@ impl<T> Deref for ListEntry<T> {
     }
 }
 
-impl<T> Drop for ListEntry<T> {
+impl<T> Drop for ListEntry<'_, T> {
     #[inline]
     fn drop(&mut self) {
         panic!("set entries must be used to remove their associated entry");
@@ -198,11 +178,13 @@ impl<T> Node<T> {
         &*self.elem
     }
 
+    /// Returns a reference to the node's `next` pointer.
     #[inline]
     fn next(&self) -> &AtomicMarkedPtr<Node<T>> {
         &*self.next
     }
 
+    /// Creates a new [`Node`].
     #[inline]
     fn new(elem: T) -> Self {
         Self { elem: CacheAligned(elem), next: CacheAligned(AtomicMarkedPtr::null()) }
@@ -272,6 +254,7 @@ pub(crate) enum IterError {
 // IterInner
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// A module internal iterator over a [`List`].
 #[derive(Debug)]
 struct IterInner<'a, T> {
     head: &'a AtomicMarkedPtr<Node<T>>,
@@ -334,24 +317,6 @@ struct IterPos<T> {
     curr: NonNull<Node<T>>,
     next: Option<NonNull<Node<T>>>,
 }
-
-impl<T> IterPos<T> {
-    #[inline]
-    fn check_ordered_insert(&self, other: &Node<T>) -> Option<InsertPos<T>> {
-        if self.curr > NonNull::from(other) {
-            Some(InsertPos(self.prev, Some(self.curr)))
-        } else {
-            None
-        }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// InsertPos
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#[derive(Debug)]
-struct InsertPos<T>(NonNull<AtomicMarkedPtr<Node<T>>>, Option<NonNull<Node<T>>>);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // UnwrapPtr (trait)

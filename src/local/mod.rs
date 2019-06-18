@@ -15,7 +15,7 @@ use crate::Debra;
 
 use self::inner::LocalInner;
 
-type ThreadEntry = crate::list::ListEntry<ThreadState>;
+type ThreadEntry = crate::list::ListEntry<'static, ThreadState>;
 type Retired = reclaim::Retired<Debra>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
