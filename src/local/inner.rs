@@ -20,6 +20,7 @@ type ThreadStateIter = crate::list::Iter<'static, ThreadState>;
 // LocalInner
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// The internal mutable thread-local state.
 #[derive(Debug)]
 pub(super) struct LocalInner {
     bags: ManuallyDrop<EpochBagQueues>,
@@ -87,11 +88,19 @@ impl LocalInner {
         thread_state.store(self.cached_local_epoch, State::Inactive, SeqCst);
     }
 
+    /// Retires the given `record` in the current epoch's bag queue.
     #[inline]
     pub fn retire_record(&mut self, record: Retired) {
         self.bags.retire_record(record, &mut self.bag_pool);
     }
 
+    /// Retires the given `record` in the current epoch's bag queue as the final
+    /// record of an exiting thread.
+    ///
+    /// # Safety
+    ///
+    /// After calling this method, no further calls to `retire_record` or
+    /// `retire_final_record` must be made.
     #[inline]
     pub unsafe fn retire_final_record(&mut self, record: Retired) {
         self.bags.retire_final_record(record);

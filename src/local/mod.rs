@@ -21,7 +21,7 @@ type ThreadEntry = crate::list::ListEntry<'static, ThreadState>;
 // Local
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Thread local state required for distributed epoch-based reclamation.
+/// The thread-local state required for distributed epoch-based reclamation.
 #[derive(Debug)]
 pub struct Local {
     state: ManuallyDrop<ThreadEntry>,
