@@ -176,9 +176,12 @@ impl LocalInner {
 
 impl Drop for LocalInner {
     #[inline]
+    // when a thread exits or panics, its yet un-reclaimed records can neither be leaked nor
+    // instantly reclaimed; instead, all non-empty bag queues are pushed into a global queue, from
+    // where other threads can adopt them and integrate them into their own appropriate epoch bags.
     fn drop(&mut self) {
         let bags = unsafe { super::take_manually_drop(&mut self.bags) };
-        if let Some(sealed) = SealedList::try_from_epoch_bags(bags, self.cached_local_epoch) {
+        if let Some(sealed) = SealedList::from_bags(bags, self.cached_local_epoch) {
             ABANDONED.push(sealed);
         }
     }
