@@ -11,17 +11,22 @@ mod default;
 
 mod abandoned;
 mod global;
-mod guarded;
+mod guard;
 mod list;
 mod local;
 mod sealed;
 
 use core::fmt;
 
-pub use reclaim;
+pub use debra_common::reclaim;
 pub use reclaim::typenum;
 
 pub use crate::local::Local;
+
+use cfg_if::cfg_if;
+use debra_common::LocalAccess;
+use reclaim::prelude::*;
+use typenum::{Unsigned, U0};
 
 /// A specialization of [`Atomic`][reclaim::Atomic] for the [`Debra`]
 /// reclamation scheme.
@@ -43,18 +48,13 @@ cfg_if! {
     if #[cfg(feature = "std")] {
         /// A guarded pointer that implements the [`Protect`][reclaim::Protect]
         /// trait.
-        pub type Guarded<T, N = U0> = crate::guarded::Guarded<T, N, crate::default::DefaultAccess>;
+        pub type Guard = crate::guard::Guard<crate::default::DefaultAccess>;
     } else {
         /// A guarded pointer that implements the [`Protect`][reclaim::Protect]
         /// trait.
         pub type LocalGuarded<'a, T, N> = crate::guarded::Guarded<T, N, &'a Local>;
     }
 }
-
-use cfg_if::cfg_if;
-use debra_common::LocalAccess;
-use reclaim::prelude::*;
-use typenum::{Unsigned, U0};
 
 type Retired = reclaim::Retired<Debra>;
 
@@ -73,7 +73,7 @@ impl fmt::Display for Debra {
     }
 }
 
-unsafe impl LocalReclaim for Debra {
+unsafe impl Reclaim for Debra {
     type Local = Local;
     type RecordHeader = ();
 

@@ -1,20 +1,20 @@
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+
 use core::mem::{self, ManuallyDrop};
 use core::ptr::NonNull;
 use core::sync::atomic::Ordering::{Acquire, Release, SeqCst};
 
-#[cfg(not(feature = "std"))]
-use alloc::boxed::Box;
-
 use debra_common::epoch::Epoch;
 use debra_common::thread::{State, ThreadState};
 
-use crate::global;
+use crate::global::{ABANDONED, EPOCH, THREADS};
 use crate::sealed::SealedList;
+use crate::Retired;
 
 type BagPool = debra_common::bag::BagPool<crate::Debra>;
 type EpochBagQueues = debra_common::bag::EpochBagQueues<crate::Debra>;
 type ThreadStateIter = crate::list::Iter<'static, ThreadState>;
-type Retired = reclaim::Retired<crate::Debra>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // LocalInner
@@ -45,7 +45,7 @@ impl LocalInner {
             can_advance: false,
             check_count: 0,
             ops_count: 0,
-            thread_iter: global::THREADS.iter(),
+            thread_iter: THREADS.iter(),
         }
     }
 
@@ -53,7 +53,7 @@ impl LocalInner {
     #[inline]
     pub fn set_active(&mut self, thread_state: &ThreadState) {
         // (INN:1) this `Acquire` load synchronizes-with the `Release` CAS (INN:6)
-        let global_epoch = global::EPOCH.load(Acquire);
+        let global_epoch = EPOCH.load(Acquire);
 
         // the global epoch has been advanced since the last time this thread has called
         // `set_active`, restart all incremental checks
@@ -62,7 +62,7 @@ impl LocalInner {
             self.can_advance = false;
             self.ops_count = 0;
             self.check_count = 0;
-            self.thread_iter = global::THREADS.iter();
+            self.thread_iter = THREADS.iter();
 
             // it is now safe to reclaim the records stored in the oldest epoch bag
             unsafe { self.bags.rotate_and_reclaim(&mut self.bag_pool) };
@@ -121,16 +121,18 @@ impl LocalInner {
                 let other = curr.unwrap_or_else(|| {
                     // we have reached the end of the list and restart, since this means we have
                     // successfully checked all other threads at least once and all newly spawned
-                    // threads automatically start in the global epoch (i.e. are safe to pass)
+                    // threads inserted before the iterator automatically start in the global epoch,
+                    // i.e. are safe to pass over by default
                     self.can_advance = true;
-                    self.thread_iter = global::THREADS.iter();
-                    // (INN:5) this `Acquire` load synchronizes-with the the `Release` CAS (LIS:1) and (LIS:3)
-                    // (since at least the current thread is still alive, the thread list can not be empty)
+                    self.thread_iter = THREADS.iter();
+                    // (INN:5) this `Acquire` load synchronizes-with the the `Release` CAS (LIS:1)
+                    // and (LIS:3); since at least the current thread is still alive, the thread
+                    // list can not be empty)
                     self.thread_iter.load_head(Acquire).unwrap_or_else(|| unreachable!())
                 });
 
                 // the iterator can only be advanced if the currently observed thread is either
-                //   a) the same as the observing thread (we),
+                //   a) the same as the observing thread (us),
                 //   b) has announced the global epoch or
                 //   c) is currently inactive
                 if thread_state.is_same(other) || can_advance(global_epoch, other) {
@@ -139,7 +141,7 @@ impl LocalInner {
 
                     // (INN:6) this `Release` CAS synchronizes-with the `Acquire` load (INN:1)
                     if self.can_advance && self.check_count >= Self::ADVANCE_THRESHOLD {
-                        global::EPOCH.compare_and_swap(global_epoch, global_epoch + 1, Release);
+                        EPOCH.compare_and_swap(global_epoch, global_epoch + 1, Release);
                     }
                 }
             }
@@ -152,7 +154,7 @@ impl LocalInner {
     /// all others are put in the local thread's appropriate epoch bags
     #[inline]
     fn adopt_and_reclaim(&mut self) {
-        for sealed in global::ABANDONED.take_all() {
+        for sealed in ABANDONED.take_all() {
             if let Ok(age) = sealed.seal.relative_age(self.cached_local_epoch) {
                 let retired = unsafe { Retired::new_unchecked(NonNull::from(Box::leak(sealed))) };
                 self.bags.retire_record_by_age(retired, age, &mut self.bag_pool);
@@ -168,7 +170,7 @@ impl Drop for LocalInner {
     fn drop(&mut self) {
         let bags = unsafe { super::take_manually_drop(&mut self.bags) };
         if let Some(sealed) = SealedList::try_from_epoch_bags(bags, self.cached_local_epoch) {
-            global::ABANDONED.push(sealed);
+            ABANDONED.push(sealed);
         }
     }
 }

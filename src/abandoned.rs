@@ -1,14 +1,14 @@
 //! Simple concurrent & lock-free multiple-producer/single-consumer queue for
 //! storing bag queues of exited threads.
 
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+
 use core::ptr::{self, NonNull};
 use core::sync::atomic::{
     AtomicPtr,
     Ordering::{Acquire, Relaxed, Release},
 };
-
-#[cfg(not(feature = "std"))]
-use alloc::boxed::Box;
 
 use crate::sealed::{Sealed, SealedList};
 

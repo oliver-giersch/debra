@@ -1,13 +1,13 @@
 //! Thread local variables and access abstractions for *std* environments.
 
+use debra_common::reclaim;
 use debra_common::LocalAccess;
-use reclaim::{LocalReclaim, Reclaim};
+use reclaim::{GlobalReclaim, Reclaim};
 
-use crate::guarded::Guarded;
+use crate::guard::Guard;
 use crate::local::Local;
-use crate::retired::Retired;
 use crate::typenum::Unsigned;
-use crate::{Debra, Unlinked};
+use crate::{Debra, Retired, Unlinked};
 
 thread_local!(static LOCAL: Local = Local::new());
 
@@ -15,7 +15,9 @@ thread_local!(static LOCAL: Local = Local::new());
 // impl Reclaim
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-unsafe impl Reclaim for Debra {
+unsafe impl GlobalReclaim for Debra {
+    type Guard = Guard<DefaultAccess>;
+
     #[inline]
     unsafe fn retire<T: 'static, N: Unsigned>(unlinked: Unlinked<T, N>) {
         LOCAL.with(move |local| Self::retire_local(local, unlinked));
@@ -31,14 +33,14 @@ unsafe impl Reclaim for Debra {
 // Guarded
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<T, N: Unsigned> Guarded<T, N, DefaultAccess> {
+impl Guard<DefaultAccess> {
     #[inline]
     pub fn new() -> Self {
         Self::with_local_access(DefaultAccess)
     }
 }
 
-impl<T, N: Unsigned> Default for Guarded<T, N, DefaultAccess> {
+impl Default for Guard<DefaultAccess> {
     #[inline]
     fn default() -> Self {
         Self::new()

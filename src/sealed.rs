@@ -1,11 +1,11 @@
 //! Abandoned epoch queues sealed with epoch information.
 
-use core::ptr::NonNull;
-
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
 
-use arrayvec::ArrayVec;
+use core::ptr::NonNull;
+
+use debra_common::arrayvec::ArrayVec;
 use debra_common::epoch::Epoch;
 
 type BagQueue = debra_common::bag::BagQueue<crate::Debra>;
@@ -58,5 +58,12 @@ impl Sealed {
         queue.into_non_empty().map(|queue| {
             NonNull::from(Box::leak(Box::new(Self { next: None, seal: epoch, queue })))
         })
+    }
+}
+
+impl Drop for Sealed {
+    #[inline]
+    fn drop(&mut self) {
+        unsafe { self.queue.reclaim_all_pre_drop() };
     }
 }

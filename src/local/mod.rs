@@ -11,12 +11,11 @@ use debra_common::thread::ThreadState;
 use debra_common::LocalAccess;
 
 use crate::global;
-use crate::Debra;
+use crate::{Debra, Retired};
 
 use self::inner::LocalInner;
 
 type ThreadEntry = crate::list::ListEntry<'static, ThreadState>;
-type Retired = reclaim::Retired<Debra>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Local

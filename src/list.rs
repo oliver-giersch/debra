@@ -2,15 +2,16 @@
 //! entries and does not deallocate memory of entries removed during its
 //! lifetime.
 
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+
 use core::marker::PhantomData;
 use core::mem;
 use core::ops::Deref;
 use core::ptr::{self, NonNull};
 use core::sync::atomic::Ordering::{self, Acquire, Relaxed, Release};
 
-#[cfg(not(feature = "std"))]
-use alloc::boxed::Box;
-
+use debra_common::reclaim;
 use reclaim::align::CacheAligned;
 use reclaim::prelude::*;
 use reclaim::typenum::U1;
