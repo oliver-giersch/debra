@@ -11,6 +11,15 @@ use crate::{Debra, Retired, Unlinked};
 
 thread_local!(static LOCAL: Local = Local::new());
 
+impl Debra {
+    /// Returns `true` if the current thread is active, i.e. has an at least one
+    /// [`Guard`] in some scope.
+    #[inline]
+    pub fn is_thread_active() -> bool {
+        LOCAL.with(|local| local.is_active())
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // impl GlobalReclaim
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -56,6 +65,11 @@ pub struct DefaultAccess;
 
 impl LocalAccess for DefaultAccess {
     type Reclaimer = Debra;
+
+    #[inline]
+    fn is_active(self) -> bool {
+        LOCAL.with(|local| local.is_active())
+    }
 
     #[inline]
     fn set_active(self) {

@@ -49,6 +49,11 @@ impl<'a> LocalAccess for &'a Local {
     type Reclaimer = Debra;
 
     #[inline]
+    fn is_active(self) -> bool {
+        self.guard_count.get() > 0
+    }
+
+    #[inline]
     fn set_active(self) {
         let count = self.guard_count.get();
         if count == 0 {
