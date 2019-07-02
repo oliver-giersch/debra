@@ -11,13 +11,12 @@ use core::ops::Deref;
 use core::ptr::{self, NonNull};
 use core::sync::atomic::Ordering::{self, Acquire, Relaxed, Release};
 
-use debra_common::reclaim;
-use reclaim::align::CacheAligned;
-use reclaim::prelude::*;
-use reclaim::typenum::U1;
-use reclaim::{MarkedNonNull, MarkedPtr};
+use crate::reclaim::align::CacheAligned;
+use crate::reclaim::prelude::*;
+use crate::reclaim::typenum::U1;
+use crate::reclaim::{MarkedNonNull, MarkedPtr};
 
-type AtomicMarkedPtr<T> = reclaim::AtomicMarkedPtr<T, U1>;
+type AtomicMarkedPtr<T> = crate::reclaim::AtomicMarkedPtr<T, U1>;
 
 const REMOVE_TAG: usize = 0b1;
 
@@ -37,7 +36,7 @@ pub(crate) struct List<T> {
 }
 
 impl<T> List<T> {
-    /// Creates a new empty list
+    /// Creates a new empty [`List`].
     pub const fn new() -> Self {
         Self { head: AtomicMarkedPtr::null() }
     }
