@@ -75,10 +75,11 @@ impl<T> List<T> {
     /// Panics if the given `entry` belongs to a different list.
     #[inline]
     pub fn remove(&self, entry: ListEntry<T>) -> NonNull<Node<T>> {
+        let state = NonNull::from(&*entry);
         let entry = entry.into_inner();
         loop {
             let pos = self
-                .iter_inner()
+                .iter_inner(state)
                 .find(|pos| pos.curr == entry)
                 .expect("given `entry` does not exist in this set");
 
@@ -102,14 +103,14 @@ impl<T> List<T> {
 
     /// Returns an iterator over the list.
     #[inline]
-    pub fn iter(&self) -> Iter<T> {
-        Iter::new(self, &self.head)
+    pub fn iter(&self, entry: &T) -> Iter<T> {
+        Iter::new(self, &self.head, entry)
     }
 
     /// Returns an internal iterator over the list.
     #[inline]
-    fn iter_inner(&self) -> IterInner<T> {
-        IterInner { head: &self.head, prev: NonNull::from(&self.head) }
+    fn iter_inner(&self, entry: NonNull<T>) -> IterInner<T> {
+        IterInner { head: &self.head, prev: NonNull::from(&self.head), entry }
     }
 }
 
@@ -187,7 +188,7 @@ pub(crate) struct Node<T> {
 impl<T> Node<T> {
     /// Returns a reference to the node's element.
     #[inline]
-    pub fn elem(&self) -> &T {
+    fn elem(&self) -> &T {
         &*self.elem
     }
 
@@ -229,8 +230,12 @@ impl<'a, T> Iter<'a, T> {
     /// Creates a new iterator for the given `list` that starts at the given
     /// list position.
     #[inline]
-    pub fn new(list: &'a List<T>, start: &AtomicMarkedPtr<Node<T>>) -> Self {
-        Self(IterInner { head: &list.head, prev: NonNull::from(start) })
+    pub fn new(list: &'a List<T>, start: &AtomicMarkedPtr<Node<T>>, entry: &T) -> Self {
+        Self(IterInner {
+            head: &list.head,
+            prev: NonNull::from(start),
+            entry: NonNull::from(entry),
+        })
     }
 
     /// Loads the entry and its tag at the current position of the iterator.
@@ -276,6 +281,7 @@ pub(crate) enum IterError {
 struct IterInner<'a, T> {
     head: &'a AtomicMarkedPtr<Node<T>>,
     prev: NonNull<AtomicMarkedPtr<Node<T>>>,
+    entry: NonNull<T>,
 }
 
 impl<T> Iterator for IterInner<'_, T> {
@@ -301,16 +307,13 @@ impl<T> Iterator for IterInner<'_, T> {
             }
 
             let (next, next_tag) = next.decompose();
-            if next_tag == REMOVE_TAG {
+            if next_tag == REMOVE_TAG && curr.elem() as *const T != self.entry.as_ptr() {
                 continue;
             }
 
+            let prev = self.prev;
             self.prev = NonNull::from(curr_next);
-            return Some(IterPos {
-                prev: self.prev,
-                curr: NonNull::from(curr),
-                next: NonNull::new(next),
-            });
+            return Some(IterPos { prev, curr: NonNull::from(curr), next: NonNull::new(next) });
         }
 
         None
@@ -353,6 +356,33 @@ impl<T> UnwrapPtr for Option<NonNull<T>> {
         match self {
             Some(non_null) => non_null.as_ptr(),
             None => ptr::null_mut(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::thread::{self, ThreadId};
+
+    use super::List;
+
+    static LIST: List<ThreadId> = List::new();
+
+    #[test]
+    fn stress() {
+        for _ in 0..10 {
+            let handles: Vec<_> = (0..8)
+                .map(|_| {
+                    thread::spawn(|| {
+                        let token = LIST.insert(thread::current().id());
+                        let _ = LIST.remove(token); // leaks memory
+                    })
+                })
+                .collect();
+
+            for handle in handles {
+                handle.join().unwrap();
+            }
         }
     }
 }

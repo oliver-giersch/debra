@@ -52,7 +52,7 @@ cfg_if! {
     } else {
         /// A guarded pointer that implements the [`Protect`][reclaim::Protect]
         /// trait.
-        pub type LocalGuarded<'a, T, N> = crate::guarded::Guarded<T, N, &'a Local>;
+        pub type LocalGuard<'a> = crate::guard::Guard<&'a Local>;
     }
 }
 
