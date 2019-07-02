@@ -15,8 +15,8 @@ Many concurrent lock-free data structures require an additional minimal (also lo
 garbage collector, which determines, when a removed value can be safely de-allocated.
 This can not be determined statically, since many threads could potentially still access
 previously created references to the removed value.
-This crate provides a simple and (mostly) safe interface for interacting with the DEBRA
-memory reclamation scheme.
+This crate provides a simple and (mostly) safe interface for interacting with the
+[DEBRA](https://dl.acm.org/citation.cfm?id=2767436) memory reclamation scheme.
 
 ## Usage
 
