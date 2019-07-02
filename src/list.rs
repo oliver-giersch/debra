@@ -365,6 +365,7 @@ impl<T> UnwrapPtr for Option<NonNull<T>> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::Ordering::Relaxed;
     use std::thread::{self, ThreadId};
 
     use super::List;
@@ -372,7 +373,7 @@ mod tests {
     static LIST: List<ThreadId> = List::new();
 
     #[test]
-    fn stress() {
+    fn thread_ids() {
         for _ in 0..10 {
             let handles: Vec<_> = (0..8)
                 .map(|_| {
@@ -386,6 +387,8 @@ mod tests {
             for handle in handles {
                 handle.join().unwrap();
             }
+
+            assert!(LIST.head.load(Relaxed).is_null());
         }
     }
 }
