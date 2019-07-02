@@ -75,11 +75,10 @@ impl<T> List<T> {
     /// Panics if the given `entry` belongs to a different list.
     #[inline]
     pub fn remove(&self, entry: ListEntry<T>) -> NonNull<Node<T>> {
-        let state = NonNull::from(&*entry);
         let entry = entry.into_inner();
         loop {
             let pos = self
-                .iter_inner(state)
+                .iter_inner(Some(entry))
                 .find(|pos| pos.curr == entry)
                 .expect("given `entry` does not exist in this set");
 
@@ -103,14 +102,14 @@ impl<T> List<T> {
 
     /// Returns an iterator over the list.
     #[inline]
-    pub fn iter(&self, entry: &T) -> Iter<T> {
-        Iter::new(self, &self.head, entry)
+    pub fn iter(&self) -> Iter<T> {
+        Iter::new(self, &self.head)
     }
 
     /// Returns an internal iterator over the list.
     #[inline]
-    fn iter_inner(&self, entry: NonNull<T>) -> IterInner<T> {
-        IterInner { head: &self.head, prev: NonNull::from(&self.head), entry }
+    fn iter_inner(&self, ignore: Option<NonNull<Node<T>>>) -> IterInner<T> {
+        IterInner { head: &self.head, prev: NonNull::from(&self.head), ignore }
     }
 }
 
@@ -230,12 +229,8 @@ impl<'a, T> Iter<'a, T> {
     /// Creates a new iterator for the given `list` that starts at the given
     /// list position.
     #[inline]
-    pub fn new(list: &'a List<T>, start: &AtomicMarkedPtr<Node<T>>, entry: &T) -> Self {
-        Self(IterInner {
-            head: &list.head,
-            prev: NonNull::from(start),
-            entry: NonNull::from(entry),
-        })
+    pub fn new(list: &'a List<T>, start: &AtomicMarkedPtr<Node<T>>) -> Self {
+        Self(IterInner { head: &list.head, prev: NonNull::from(start), ignore: None })
     }
 
     /// Loads the entry and its tag at the current position of the iterator.
@@ -281,7 +276,7 @@ pub(crate) enum IterError {
 struct IterInner<'a, T> {
     head: &'a AtomicMarkedPtr<Node<T>>,
     prev: NonNull<AtomicMarkedPtr<Node<T>>>,
-    entry: NonNull<T>,
+    ignore: Option<NonNull<Node<T>>>,
 }
 
 impl<T> Iterator for IterInner<'_, T> {
@@ -307,7 +302,7 @@ impl<T> Iterator for IterInner<'_, T> {
             }
 
             let (next, next_tag) = next.decompose();
-            if next_tag == REMOVE_TAG && curr.elem() as *const T != self.entry.as_ptr() {
+            if next_tag == REMOVE_TAG && !self.ignore_marked(curr) {
                 continue;
             }
 
@@ -324,6 +319,14 @@ impl<T> IterInner<'_, T> {
     #[inline]
     fn restart(&mut self) {
         self.prev = NonNull::from(self.head);
+    }
+
+    #[inline]
+    fn ignore_marked(&self, curr: *const Node<T>) -> bool {
+        match self.ignore {
+            Some(ignore) if ignore.as_ptr() as *const _ == curr => true,
+            _ => false,
+        }
     }
 }
 

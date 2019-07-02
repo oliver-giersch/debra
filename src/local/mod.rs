@@ -36,9 +36,12 @@ impl Local {
         let global_epoch = global::EPOCH.load(Ordering::SeqCst);
         let thread_epoch = ThreadState::new(global_epoch);
         let state = global::THREADS.insert(thread_epoch);
-        let inner = UnsafeCell::new(LocalInner::new(global_epoch, &state));
 
-        Self { state: ManuallyDrop::new(state), guard_count: Cell::default(), inner }
+        Self {
+            state: ManuallyDrop::new(state),
+            guard_count: Cell::default(),
+            inner: UnsafeCell::new(LocalInner::new(global_epoch)),
+        }
     }
 }
 

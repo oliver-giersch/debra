@@ -38,7 +38,7 @@ impl LocalInner {
 
     /// Creates a new [`LocalInner`].
     #[inline]
-    pub fn new(global_epoch: Epoch, thread_state: &ThreadState) -> Self {
+    pub fn new(global_epoch: Epoch) -> Self {
         Self {
             bags: ManuallyDrop::new(EpochBagQueues::new()),
             bag_pool: BagPool::new(),
@@ -46,7 +46,7 @@ impl LocalInner {
             can_advance: false,
             check_count: 0,
             ops_count: 0,
-            thread_iter: THREADS.iter(thread_state),
+            thread_iter: THREADS.iter(),
         }
     }
 
@@ -63,7 +63,7 @@ impl LocalInner {
             self.can_advance = false;
             self.ops_count = 0;
             self.check_count = 0;
-            self.thread_iter = THREADS.iter(thread_state);
+            self.thread_iter = THREADS.iter();
 
             // it is now safe to reclaim the records stored in the oldest epoch bag
             unsafe { self.bags.rotate_and_reclaim(&mut self.bag_pool) };
@@ -133,7 +133,7 @@ impl LocalInner {
                     // threads inserted before the iterator automatically start in the global epoch,
                     // i.e. are safe to pass over by default
                     self.can_advance = true;
-                    self.thread_iter = THREADS.iter(thread_state);
+                    self.thread_iter = THREADS.iter();
                     // (INN:5) this `Acquire` load synchronizes-with the the `Release` CAS (LIS:1)
                     // and (LIS:3); since at least the current thread is still alive, the thread
                     // list can not be empty)
