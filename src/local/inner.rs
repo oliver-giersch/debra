@@ -6,7 +6,10 @@ use core::ptr::NonNull;
 use core::sync::atomic::Ordering::{Acquire, Release, SeqCst};
 
 use debra_common::epoch::Epoch;
-use debra_common::thread::{State, ThreadState};
+use debra_common::thread::{
+    State::{Active, Inactive},
+    ThreadState,
+};
 
 use crate::global::{ABANDONED, EPOCH, THREADS};
 use crate::sealed::SealedList;
@@ -77,7 +80,7 @@ impl LocalInner {
         // total order of all operations on `ThreadState` values.
         // this operation announces the current global epoch and marks the thread as active to all
         // other threads
-        thread_state.store(global_epoch, State::Active, SeqCst);
+        thread_state.store(global_epoch, Active, SeqCst);
     }
 
     /// Marks the associated thread as inactive.
@@ -85,7 +88,7 @@ impl LocalInner {
     pub fn set_inactive(&self, thread_state: &ThreadState) {
         // (INN:3) this `SeqCst` store synchronizes-with the `SeqCst` load (INN:7), establishing a
         // total order of all operations on `ThreadState` values.
-        thread_state.store(self.cached_local_epoch, State::Inactive, SeqCst);
+        thread_state.store(self.cached_local_epoch, Inactive, SeqCst);
     }
 
     /// Retires the given `record` in the current epoch's bag queue.
@@ -194,5 +197,5 @@ fn can_advance(global_epoch: Epoch, other: &ThreadState) -> bool {
     // (INN:7) this `SeqCst` load synchronizes-with the `SeqCst` stores (INN:2) and (INN:3),
     // establishing a total order of all operations on `ThreadState` values.
     let (epoch, state) = other.load(SeqCst);
-    epoch == global_epoch || state == State::Inactive
+    epoch == global_epoch || state == Inactive
 }
