@@ -78,7 +78,7 @@ impl<T> List<T> {
         let entry = entry.into_inner();
         loop {
             let pos = self
-                .iter_inner(Some(entry))
+                .iter_inner(None)
                 .find(|pos| pos.curr == entry)
                 .expect("given `entry` does not exist in this set");
 
@@ -94,9 +94,11 @@ impl<T> List<T> {
 
             // (LIS:3) this `Release` CAS synchronizes-with the `Acquire` loads (INN:3), (INN:4),
             // (LIS:4), (LIS:5) and the `Acquire` CAS (LIS:2)
-            if prev.compare_exchange(MarkedPtr::from(curr), next, Release, Relaxed).is_ok() {
-                return entry;
+            if prev.compare_exchange(MarkedPtr::from(curr), next, Release, Relaxed).is_err() {
+                self.repeat_remove(entry);
             }
+
+            return entry;
         }
     }
 
@@ -104,6 +106,26 @@ impl<T> List<T> {
     #[inline]
     pub fn iter(&self) -> Iter<T> {
         Iter::new(self, &self.head)
+    }
+
+    /// Loops until a marked node containing `entry` is successfully removed.
+    #[inline]
+    fn repeat_remove(&self, entry: NonNull<Node<T>>) {
+        loop {
+            let pos = self
+                .iter_inner(Some(entry))
+                .find(|pos| pos.curr == entry)
+                .unwrap_or_else(|| unreachable!());
+
+            let prev = unsafe { pos.prev.as_ref() };
+            let curr = MarkedPtr::new(pos.curr.as_ptr());
+            let next = MarkedPtr::new(pos.next.unwrap_ptr());
+
+            // same as (LIS:3)
+            if prev.compare_exchange(curr, next, Release, Relaxed).is_ok() {
+                return;
+            }
+        }
     }
 
     /// Returns an internal iterator over the list.
@@ -374,7 +396,7 @@ mod tests {
 
     #[test]
     fn thread_ids() {
-        for _ in 0..10 {
+        for _ in 0..100_000 {
             let handles: Vec<_> = (0..8)
                 .map(|_| {
                     thread::spawn(|| {
