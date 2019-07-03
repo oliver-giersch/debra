@@ -18,7 +18,7 @@ mod sealed;
 
 use core::fmt;
 
-pub use debra_common::reclaim;
+pub use debra_common::{reclaim, EPOCH_CACHE_SIZE};
 pub use reclaim::typenum;
 
 #[cfg(feature = "std")]
