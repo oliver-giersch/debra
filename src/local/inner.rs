@@ -23,6 +23,8 @@ type ThreadStateIter = crate::list::Iter<'static, ThreadState>;
 // LocalInner
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
+
 /// The internal mutable thread-local state.
 #[derive(Debug)]
 pub(super) struct LocalInner {
@@ -36,7 +38,7 @@ pub(super) struct LocalInner {
 }
 
 impl LocalInner {
-    const CHECK_THRESHOLD: u32 = 100;
+    const CHECK_THRESHOLD: u32 = CHECK_THRESHOLD;
     const ADVANCE_THRESHOLD: u32 = 100;
 
     /// Creates a new [`LocalInner`].
@@ -74,12 +76,15 @@ impl LocalInner {
         }
 
         self.ops_count += 1;
-        self.try_advance(thread_state, global_epoch);
+        if self.ops_count == Self::CHECK_THRESHOLD {
+            self.ops_count = 0;
+            self.try_advance(thread_state, global_epoch);
+        }
 
         // (INN:2) this `SeqCst` store synchronizes-with the `SeqCst` load (INN:7), establishing a
         // total order of all operations on `ThreadState` values.
         // this operation announces the current global epoch and marks the thread as active to all
-        // other threads
+        // other threads, the cached epoch is only updated in the next call to set_active
         thread_state.store(global_epoch, Active, SeqCst);
     }
 
@@ -123,38 +128,35 @@ impl LocalInner {
     /// Only, once a thread has visited all threads at least once and has
     /// observed all threads in a valid state (i.e. either inactive or as having
     /// announced the global epoch), it can attempt to advance the global epoch.
+    #[cold]
     #[inline]
     fn try_advance(&mut self, thread_state: &ThreadState, global_epoch: Epoch) {
-        if self.ops_count >= Self::CHECK_THRESHOLD {
-            self.ops_count = 0;
+        // (INN:4) this `Acquire` load synchronizes-with the `Release` CAS (LIS:1) and (LIS:3)
+        if let Ok(curr) = self.thread_iter.load_current(Acquire) {
+            let other = curr.unwrap_or_else(|| {
+                // we have reached the end of the list and restart, since this means we have
+                // successfully checked all other threads at least once and all newly spawned
+                // threads inserted before the iterator automatically start in the global epoch,
+                // i.e. are safe to pass over by default
+                self.can_advance = true;
+                self.thread_iter = THREADS.iter();
+                // (INN:5) this `Acquire` load synchronizes-with the the `Release` CAS (LIS:1)
+                // and (LIS:3); since at least the current thread is still alive, the thread
+                // list can not be empty)
+                self.thread_iter.load_head(Acquire).unwrap_or_else(|| unreachable!())
+            });
 
-            // (INN:4) this `Acquire` load synchronizes-with the `Release` CAS (LIS:1) and (LIS:3)
-            if let Ok(curr) = self.thread_iter.load_current(Acquire) {
-                let other = curr.unwrap_or_else(|| {
-                    // we have reached the end of the list and restart, since this means we have
-                    // successfully checked all other threads at least once and all newly spawned
-                    // threads inserted before the iterator automatically start in the global epoch,
-                    // i.e. are safe to pass over by default
-                    self.can_advance = true;
-                    self.thread_iter = THREADS.iter();
-                    // (INN:5) this `Acquire` load synchronizes-with the the `Release` CAS (LIS:1)
-                    // and (LIS:3); since at least the current thread is still alive, the thread
-                    // list can not be empty)
-                    self.thread_iter.load_head(Acquire).unwrap_or_else(|| unreachable!())
-                });
+            // the iterator can only be advanced if the currently observed thread is either
+            //   a) the same as the observing thread (us),
+            //   b) has announced the global epoch or
+            //   c) is currently inactive
+            if thread_state.is_same(other) || can_advance(global_epoch, other) {
+                self.check_count += 1;
+                let _ = self.thread_iter.next();
 
-                // the iterator can only be advanced if the currently observed thread is either
-                //   a) the same as the observing thread (us),
-                //   b) has announced the global epoch or
-                //   c) is currently inactive
-                if thread_state.is_same(other) || can_advance(global_epoch, other) {
-                    self.check_count += 1;
-                    let _ = self.thread_iter.next();
-
-                    // (INN:6) this `Release` CAS synchronizes-with the `Acquire` load (INN:1)
-                    if self.can_advance && self.check_count >= Self::ADVANCE_THRESHOLD {
-                        EPOCH.compare_and_swap(global_epoch, global_epoch + 1, Release);
-                    }
+                // (INN:6) this `Release` CAS synchronizes-with the `Acquire` load (INN:1)
+                if self.can_advance && self.check_count >= Self::ADVANCE_THRESHOLD {
+                    EPOCH.compare_and_swap(global_epoch, global_epoch + 1, Release);
                 }
             }
         }
@@ -164,6 +166,7 @@ impl LocalInner {
     ///
     /// Any records that are older than two epochs are immediately reclaimed,
     /// all others are put in the local thread's appropriate epoch bags
+    #[cold]
     #[inline]
     fn adopt_and_reclaim(&mut self) {
         for sealed in ABANDONED.take_all() {
