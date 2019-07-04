@@ -43,6 +43,12 @@ impl Local {
             inner: UnsafeCell::new(LocalInner::new(global_epoch)),
         }
     }
+
+    /// Attempts to reclaim the retired records in the oldest epoch bag queue.
+    #[inline]
+    pub fn try_flush(&self) {
+        unsafe { &mut *self.inner.get() }.try_flush(&**self.state);
+    }
 }
 
 impl<'a> LocalAccess for &'a Local {

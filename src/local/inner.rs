@@ -3,7 +3,7 @@ use alloc::boxed::Box;
 
 use core::mem::{self, ManuallyDrop};
 use core::ptr::NonNull;
-use core::sync::atomic::Ordering::{Acquire, Release, SeqCst};
+use core::sync::atomic::Ordering::{Acquire, Relaxed, Release, SeqCst};
 
 use debra_common::epoch::Epoch;
 use debra_common::thread::{
@@ -55,25 +55,18 @@ impl LocalInner {
         }
     }
 
+    /// Attempts to reclaim the retired records in the oldest epoch bag queue.
+    #[inline]
+    pub fn try_flush(&mut self, thread_state: &ThreadState) {
+        let global_epoch = self.acquire_and_assess_global_epoch();
+        // irrelevant for other threads since the thread remains inactive
+        thread_state.store(global_epoch, Inactive, Relaxed);
+    }
+
     /// Marks the associated thread as active.
     #[inline]
     pub fn set_active(&mut self, thread_state: &ThreadState) {
-        // (INN:1) this `Acquire` load synchronizes-with the `Release` CAS (INN:6)
-        let global_epoch = EPOCH.load(Acquire);
-
-        // the global epoch has been advanced since the last time this thread has called
-        // `set_active`, restart all incremental checks
-        if global_epoch != self.cached_local_epoch {
-            self.cached_local_epoch = global_epoch;
-            self.can_advance = false;
-            self.ops_count = 0;
-            self.check_count = 0;
-            self.thread_iter = THREADS.iter();
-
-            // it is now safe to reclaim the records stored in the oldest epoch bag
-            unsafe { self.bags.rotate_and_reclaim(&mut self.bag_pool) };
-            self.adopt_and_reclaim();
-        }
+        let global_epoch = self.acquire_and_assess_global_epoch();
 
         self.ops_count += 1;
         if self.ops_count == Self::CHECK_THRESHOLD {
@@ -81,7 +74,7 @@ impl LocalInner {
             self.try_advance(thread_state, global_epoch);
         }
 
-        // (INN:2) this `SeqCst` store synchronizes-with the `SeqCst` load (INN:7), establishing a
+        // (INN:1) this `SeqCst` store synchronizes-with the `SeqCst` load (INN:7), establishing a
         // total order of all operations on `ThreadState` values.
         // this operation announces the current global epoch and marks the thread as active to all
         // other threads, the cached epoch is only updated in the next call to set_active
@@ -91,7 +84,7 @@ impl LocalInner {
     /// Marks the associated thread as inactive.
     #[inline]
     pub fn set_inactive(&self, thread_state: &ThreadState) {
-        // (INN:3) this `SeqCst` store synchronizes-with the `SeqCst` load (INN:7), establishing a
+        // (INN:2) this `SeqCst` store synchronizes-with the `SeqCst` load (INN:7), establishing a
         // total order of all operations on `ThreadState` values.
         thread_state.store(self.cached_local_epoch, Inactive, SeqCst);
     }
@@ -114,6 +107,33 @@ impl LocalInner {
         self.bags.retire_final_record(record);
     }
 
+    /// Loads ([`Acquire`]) the global epoch and compares it with the local one.
+    ///
+    /// If the local epoch is older than the global epoch, all incremental
+    /// checks are restarted and all full bags in the oldest epoch bag queue
+    /// are reclaimed.
+    #[inline]
+    fn acquire_and_assess_global_epoch(&mut self) -> Epoch {
+        // (INN:3) this `Acquire` load synchronizes-with the `Release` CAS (INN:6)
+        let global_epoch = EPOCH.load(Acquire);
+
+        // the global epoch has been advanced since the last time this thread has called
+        // `set_active`, restart all incremental checks
+        if self.cached_local_epoch != global_epoch {
+            self.cached_local_epoch = global_epoch;
+            self.can_advance = false;
+            self.ops_count = 0;
+            self.check_count = 0;
+            self.thread_iter = THREADS.iter();
+
+            // it is now safe to reclaim the records stored in the oldest epoch bag
+            unsafe { self.bags.rotate_and_reclaim(&mut self.bag_pool) };
+            self.adopt_and_reclaim();
+        }
+
+        global_epoch
+    }
+
     /// Attempts to advance the global epoch.
     ///
     /// The global epoch can only be advanced, if all currently active threads
@@ -131,7 +151,7 @@ impl LocalInner {
     #[cold]
     #[inline]
     fn try_advance(&mut self, thread_state: &ThreadState, global_epoch: Epoch) {
-        // (INN:4) this `Acquire` load synchronizes-with the `Release` CAS (LIS:1) and (LIS:3)
+        // (INN:4) this `Acquire` load synchronizes-with the `Release` CAS (LIS:3) and (LIS:2)
         if let Ok(curr) = self.thread_iter.load_current(Acquire) {
             let other = curr.unwrap_or_else(|| {
                 // we have reached the end of the list and restart, since this means we have
@@ -154,7 +174,7 @@ impl LocalInner {
                 self.check_count += 1;
                 let _ = self.thread_iter.next();
 
-                // (INN:6) this `Release` CAS synchronizes-with the `Acquire` load (INN:1)
+                // (INN:6) this `Release` CAS synchronizes-with the `Acquire` load (INN:3)
                 if self.can_advance && self.check_count >= Self::ADVANCE_THRESHOLD {
                     EPOCH.compare_and_swap(global_epoch, global_epoch + 1, Release);
                 }
@@ -197,7 +217,7 @@ impl Drop for LocalInner {
 /// thread is either inactive or has itself announced the global epoch.
 #[inline(always)]
 fn can_advance(global_epoch: Epoch, other: &ThreadState) -> bool {
-    // (INN:7) this `SeqCst` load synchronizes-with the `SeqCst` stores (INN:2) and (INN:3),
+    // (INN:7) this `SeqCst` load synchronizes-with the `SeqCst` stores (INN:1) and (INN:2),
     // establishing a total order of all operations on `ThreadState` values.
     let (epoch, state) = other.load(SeqCst);
     epoch == global_epoch || state == Inactive

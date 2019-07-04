@@ -28,6 +28,11 @@ unsafe impl GlobalReclaim for Debra {
     type Guard = Guard<DefaultAccess>;
 
     #[inline]
+    fn try_flush() {
+        LOCAL.with(|local| local.try_flush());
+    }
+
+    #[inline]
     unsafe fn retire<T: 'static, N: Unsigned>(unlinked: Unlinked<T, N>) {
         LOCAL.with(move |local| Self::retire_local(local, unlinked));
     }
