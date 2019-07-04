@@ -40,6 +40,12 @@ The minimum supported (stable) rust version for this crate is 1.36.0
 See [tests/treiber.rs](tests/treiber.rs) for an implementation
 of Treiber's stack using `debra` for memory reclamation.
 
+## Features
+
+...TODO...
+DEBRA_CHECK_THRESHOLD
+DEBRA_ADVANCE_THRESHOLD
+
 ## License
 
 Debra is distributed under the terms of both the MIT license and the

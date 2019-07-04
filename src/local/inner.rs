@@ -39,7 +39,7 @@ pub(super) struct LocalInner {
 
 impl LocalInner {
     const CHECK_THRESHOLD: u32 = CHECK_THRESHOLD;
-    const ADVANCE_THRESHOLD: u32 = 100;
+    const ADVANCE_THRESHOLD: u32 = ADVANCE_THRESHOLD;
 
     /// Creates a new [`LocalInner`].
     #[inline]
