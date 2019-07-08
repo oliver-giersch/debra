@@ -106,7 +106,8 @@ impl Default for Local {
 impl Drop for Local {
     #[inline]
     fn drop(&mut self) {
-        let state = unsafe { take_manually_drop(&mut self.state) };
+        // remove thread entry from list and retire as last record
+        let state = unsafe { ptr::read(&*self.state) };
         let entry = global::THREADS.remove(state);
 
         unsafe {
@@ -115,12 +116,4 @@ impl Drop for Local {
             inner.retire_final_record(retired);
         }
     }
-}
-
-/***** helper function ****************************************************************************/
-
-// this helper function can be removed when `ManuallyDrop::take` becomes stable
-#[inline]
-unsafe fn take_manually_drop<T>(slot: &mut ManuallyDrop<T>) -> T {
-    ManuallyDrop::into_inner(ptr::read(slot))
 }

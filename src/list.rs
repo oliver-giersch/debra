@@ -51,9 +51,12 @@ impl<T> List<T> {
     pub fn insert(&self, entry: T) -> ListEntry<T> {
         let entry = Box::leak(Box::new(Node::new(entry)));
         loop {
+            // (LIS:1) this `Acquire` load synchronizes-with `Release` CAS (LIS:2)
             let head = self.head.load(Acquire);
             entry.next().store(head, Relaxed);
 
+            // (LIS:2) this `Release` CAS synchronizes-with the `Acquire` load (LIS:1), (LIS:4),
+            // (LIS:5) and the `Acquire` CAS (LIS:3)
             if self
                 .head
                 .compare_exchange_weak(head, MarkedPtr::new(entry), Release, Relaxed)
@@ -88,12 +91,12 @@ impl<T> List<T> {
             let next = MarkedPtr::new(pos.next.unwrap_ptr());
             let next_marked = MarkedPtr::compose(pos.next.unwrap_ptr(), REMOVE_TAG);
 
-            // (LIS:2) this `Acquire` CAS synchronizes-with the `Release` CAS (LIS:1) and (LIS:3)
+            // (LIS:3) this `Acquire` CAS synchronizes-with the `Release` CAS (LIS:2)
             if curr.next.compare_exchange(next, next_marked, Acquire, Relaxed).is_err() {
                 continue;
             }
 
-            // (LIS:3) this `Release` CAS synchronizes-with the `Acquire` loads (INN:3), (INN:4),
+            // (LIS:4) this `Release` CAS synchronizes-with the `Acquire` loads (INN:3), (INN:4),
             // (LIS:4), (LIS:5) and the `Acquire` CAS (LIS:2)
             if prev.compare_exchange(MarkedPtr::from(curr), next, Release, Relaxed).is_err() {
                 self.repeat_remove(entry);
@@ -261,19 +264,18 @@ impl<'a, T> Iter<'a, T> {
     /// Returns an error if a node is loaded whose predecessor is already marked
     /// for removal.
     #[inline]
-    pub fn load_current(&mut self, order: Ordering) -> Result<Option<&'a T>, IterError> {
-        let (curr, tag) = unsafe { self.0.prev.as_ref().load(order).decompose_ref() };
-        if tag == REMOVE_TAG {
-            Err(IterError::Retry)
-        } else {
-            Ok(curr.map(|node| node.elem()))
+    pub fn load_current_acquire(&self) -> Result<Option<&'a T>, IterError> {
+        let (curr, tag) = unsafe { self.0.prev.as_ref().load(Acquire).decompose_ref() };
+        match tag {
+            REMOVE_TAG => Err(IterError::Retry),
+            _ => Ok(curr.map(|node| node.elem())),
         }
     }
 
     /// Loads and dereferences the current value of the [`List`]'s head.
     #[inline]
-    pub fn load_head(&self, order: Ordering) -> Option<&'a T> {
-        unsafe { self.0.head.load(order).as_ref().map(|node| node.elem()) }
+    pub fn load_head_acquire(&self) -> Option<&'a T> {
+        unsafe { self.0.head.load(Acquire).as_ref().map(|node| node.elem()) }
     }
 }
 
