@@ -35,6 +35,8 @@ pub(crate) struct List<T> {
     head: AtomicMarkedPtr<Node<T>>,
 }
 
+/***** impl inherent ******************************************************************************/
+
 impl<T> List<T> {
     /// Creates a new empty [`List`].
     pub const fn new() -> Self {
@@ -134,9 +136,7 @@ impl<T> List<T> {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// impl Drop
-////////////////////////////////////////////////////////////////////////////////////////////////////
+/***** impl Drop **********************************************************************************/
 
 impl<T> Drop for List<T> {
     #[inline]
@@ -160,6 +160,8 @@ impl<T> Drop for List<T> {
 #[must_use]
 pub(crate) struct ListEntry<'a, T>(NonNull<Node<T>>, PhantomData<&'a List<T>>);
 
+/***** impl inherent ******************************************************************************/
+
 impl<T> ListEntry<'_, T> {
     #[inline]
     fn into_inner(self) -> NonNull<Node<T>> {
@@ -169,9 +171,7 @@ impl<T> ListEntry<'_, T> {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// impl Deref
-////////////////////////////////////////////////////////////////////////////////////////////////////
+/***** impl Deref *********************************************************************************/
 
 impl<T> Deref for ListEntry<'_, T> {
     type Target = T;
@@ -183,9 +183,7 @@ impl<T> Deref for ListEntry<'_, T> {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// impl Drop
-////////////////////////////////////////////////////////////////////////////////////////////////////
+/***** impl Drop **********************************************************************************/
 
 impl<T> Drop for ListEntry<'_, T> {
     #[inline]
@@ -204,6 +202,8 @@ pub(crate) struct Node<T> {
     elem: CacheAligned<T>,
     next: CacheAligned<AtomicMarkedPtr<Node<T>>>,
 }
+
+/***** impl inherent ******************************************************************************/
 
 impl<T> Node<T> {
     /// Returns a reference to the node's element.
@@ -233,9 +233,7 @@ impl<T> Node<T> {
 #[derive(Debug)]
 pub(crate) struct Iter<'a, T>(IterInner<'a, T>);
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// impl Iterator
-////////////////////////////////////////////////////////////////////////////////////////////////////
+/***** impl Iterator ******************************************************************************/
 
 impl<'a, T> Iterator for Iter<'a, T> {
     type Item = &'a T;
@@ -245,6 +243,8 @@ impl<'a, T> Iterator for Iter<'a, T> {
         self.0.next().map(|IterPos { curr, .. }| unsafe { &*curr.as_ptr() }.elem())
     }
 }
+
+/***** impl inherent ******************************************************************************/
 
 impl<'a, T> Iter<'a, T> {
     /// Creates a new iterator for the given `list` that starts at the given
@@ -300,6 +300,8 @@ struct IterInner<'a, T> {
     ignore: Option<NonNull<Node<T>>>,
 }
 
+/***** impl Iterator ******************************************************************************/
+
 impl<T> Iterator for IterInner<'_, T> {
     type Item = IterPos<T>;
 
@@ -335,6 +337,8 @@ impl<T> Iterator for IterInner<'_, T> {
         None
     }
 }
+
+/***** impl inherent ******************************************************************************/
 
 impl<T> IterInner<'_, T> {
     #[inline]

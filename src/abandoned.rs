@@ -23,6 +23,8 @@ pub(crate) struct AbandonedQueue {
     head: AtomicPtr<Sealed>,
 }
 
+/***** impl inherent ******************************************************************************/
+
 impl AbandonedQueue {
     /// Creates a new empty [`AbandonedQueue`].
     #[inline]
@@ -65,6 +67,8 @@ impl AbandonedQueue {
 pub(crate) struct Iter {
     curr: Option<NonNull<Sealed>>,
 }
+
+/***** impl Iterator ******************************************************************************/
 
 impl Iterator for Iter {
     type Item = Box<Sealed>;

@@ -13,6 +13,9 @@ exclude = [".travis.yml", "ci/*"]
 [features]
 default = ["std"]
 
+# retiring of records counts towards flush threshold
+count-retire = []
+
 # disable for use in no_std crates (for limitations see README.md)
 std = ["debra-common/std"]
 
@@ -20,5 +23,5 @@ std = ["debra-common/std"]
 cfg-if = "0.1.9"
 
 [dependencies.debra-common]
-git = "https://github.com/oliver-giersch/debra-common"
+version = "0.1.1"
 default-features = false

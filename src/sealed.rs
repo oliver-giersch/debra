@@ -21,6 +21,8 @@ type EpochBagQueues = debra_common::bag::EpochBagQueues<crate::Debra>;
 #[derive(Debug)]
 pub(crate) struct SealedList(NonNull<Sealed>, NonNull<Sealed>);
 
+/***** impl inherent ******************************************************************************/
+
 impl SealedList {
     #[inline]
     pub fn from_bags(bags: EpochBagQueues, current_epoch: Epoch) -> Option<Self> {
@@ -53,6 +55,8 @@ pub(crate) struct Sealed {
     queue: Box<BagNode>,
 }
 
+/***** impl inherent ******************************************************************************/
+
 impl Sealed {
     #[inline]
     fn from_queue(queue: BagQueue, epoch: Epoch) -> Option<NonNull<Self>> {
@@ -61,6 +65,8 @@ impl Sealed {
         })
     }
 }
+
+/***** impl Drop **********************************************************************************/
 
 impl Drop for Sealed {
     #[inline]

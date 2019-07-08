@@ -19,11 +19,11 @@ type BagPool = debra_common::bag::BagPool<crate::Debra>;
 type EpochBagQueues = debra_common::bag::EpochBagQueues<crate::Debra>;
 type ThreadStateIter = crate::list::Iter<'static, ThreadState>;
 
+include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // LocalInner
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 
 /// The internal mutable thread-local state.
 #[derive(Debug)]
@@ -36,6 +36,8 @@ pub(super) struct LocalInner {
     ops_count: u32,
     thread_iter: ThreadStateIter,
 }
+
+/***** impl inherent ******************************************************************************/
 
 impl LocalInner {
     const CHECK_THRESHOLD: u32 = CHECK_THRESHOLD;
@@ -199,6 +201,8 @@ impl LocalInner {
         }
     }
 }
+
+/***** impl Drop **********************************************************************************/
 
 impl Drop for LocalInner {
     #[inline]

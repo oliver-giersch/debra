@@ -7,14 +7,14 @@ rust:
   - beta
   - nightly
 
+env:
+  - DEBRA_EPOCH_CACHE_SIZE=1
+  - DEBRA_CHECK_THRESHOLD=200
+  - DEBRA_ADVANCE_THRESHOLD=0
+
 script:
   - cargo build --verbose
   - cargo test --verbose
   - cargo test --test treiber --verbose
   - cargo build --no-default-features --verbose
   - cargo test --no-default-features --verbose
-
-matrix:
-  allow_failures:
-    - rust: nightly
-  - rust: beta

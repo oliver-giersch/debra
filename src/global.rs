@@ -1,4 +1,4 @@
-//! The global static epoch counter
+//! Global (static) values and data structures.
 
 use debra_common::epoch::AtomicEpoch;
 use debra_common::thread::ThreadState;

@@ -29,6 +29,8 @@ pub struct Local {
     inner: UnsafeCell<LocalInner>,
 }
 
+/***** impl inherent ******************************************************************************/
+
 impl Local {
     /// Creates and globally registers a new [`Local`].
     #[inline]
@@ -50,6 +52,8 @@ impl Local {
         unsafe { &mut *self.inner.get() }.try_flush(&**self.state);
     }
 }
+
+/***** impl LocalAccess ***************************************************************************/
 
 impl<'a> LocalAccess for &'a Local {
     type Reclaimer = Debra;
@@ -88,12 +92,16 @@ impl<'a> LocalAccess for &'a Local {
     }
 }
 
+/***** impl Default *******************************************************************************/
+
 impl Default for Local {
     #[inline]
     fn default() -> Self {
         Self::new()
     }
 }
+
+/***** impl Drop **********************************************************************************/
 
 impl Drop for Local {
     #[inline]
@@ -109,9 +117,7 @@ impl Drop for Local {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// helper functions
-////////////////////////////////////////////////////////////////////////////////////////////////////
+/***** helper function ****************************************************************************/
 
 // this helper function can be removed when `ManuallyDrop::take` becomes stable
 #[inline]

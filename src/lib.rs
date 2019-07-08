@@ -6,7 +6,7 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-#[cfg(feature = "std")]
+#[cfg(any(test, feature = "std"))]
 mod default;
 
 mod abandoned;
@@ -21,9 +21,9 @@ use core::fmt;
 pub use debra_common::{reclaim, EPOCH_CACHE_SIZE};
 pub use reclaim::typenum;
 
-#[cfg(feature = "std")]
-pub use crate::local::Local;
 #[cfg(not(feature = "std"))]
+pub use crate::local::Local;
+#[cfg(feature = "std")]
 use crate::local::Local;
 
 use cfg_if::cfg_if;

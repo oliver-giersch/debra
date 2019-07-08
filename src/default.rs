@@ -11,6 +11,12 @@ use crate::{Debra, Retired, Unlinked};
 
 thread_local!(static LOCAL: Local = Local::new());
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Debra
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/***** impl inherent ******************************************************************************/
+
 impl Debra {
     /// Returns `true` if the current thread is active, i.e. has an at least one
     /// [`Guard`] in some scope.
@@ -20,9 +26,7 @@ impl Debra {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// impl GlobalReclaim
-////////////////////////////////////////////////////////////////////////////////////////////////////
+/***** impl GlobalReclaim *************************************************************************/
 
 unsafe impl GlobalReclaim for Debra {
     type Guard = Guard<DefaultAccess>;
@@ -47,12 +51,16 @@ unsafe impl GlobalReclaim for Debra {
 // Guard
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/***** impl inherent ******************************************************************************/
+
 impl Guard<DefaultAccess> {
     #[inline]
     pub fn new() -> Self {
         Self::with_local_access(DefaultAccess)
     }
 }
+
+/***** impl Default *******************************************************************************/
 
 impl Default for Guard<DefaultAccess> {
     #[inline]
@@ -67,6 +75,8 @@ impl Default for Guard<DefaultAccess> {
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct DefaultAccess;
+
+/***** impl LocalAccess ***************************************************************************/
 
 impl LocalAccess for DefaultAccess {
     type Reclaimer = Debra;

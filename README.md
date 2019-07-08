@@ -43,6 +43,7 @@ of Treiber's stack using `debra` for memory reclamation.
 ## Features
 
 ...TODO...
+DEBRA_EPOCH_CACHE_SIZE
 DEBRA_CHECK_THRESHOLD
 DEBRA_ADVANCE_THRESHOLD
 
