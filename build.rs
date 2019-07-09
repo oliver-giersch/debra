@@ -24,7 +24,8 @@ fn main() {
         panic!("invalid DEBRA_CHECK_THRESHOLD value (0)");
     }
 
-    write!(&mut file, "const CHECK_THRESHOLD: u32 = {};", check).expect("could not write to file");
-    write!(&mut file, "const ADVANCE_THRESHOLD: u32 = {};", advance)
+    write!(&mut file, "const DEBRA_CHECK_THRESHOLD: u32 = {};", check)
+        .expect("could not write to file");
+    write!(&mut file, "const DEBRA_ADVANCE_THRESHOLD: u32 = {};", advance)
         .expect("could not write to file");
 }

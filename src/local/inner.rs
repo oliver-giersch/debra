@@ -13,13 +13,11 @@ use debra_common::thread::{
 
 use crate::global::{ABANDONED, EPOCH, THREADS};
 use crate::sealed::SealedList;
-use crate::Retired;
+use crate::{Retired, ADVANCE_THRESHOLD, CHECK_THRESHOLD};
 
 type BagPool = debra_common::bag::BagPool<crate::Debra>;
 type EpochBagQueues = debra_common::bag::EpochBagQueues<crate::Debra>;
 type ThreadStateIter = crate::list::Iter<'static, ThreadState>;
-
-include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // LocalInner
@@ -40,9 +38,6 @@ pub(super) struct LocalInner {
 /***** impl inherent ******************************************************************************/
 
 impl LocalInner {
-    const CHECK_THRESHOLD: u32 = CHECK_THRESHOLD;
-    const ADVANCE_THRESHOLD: u32 = ADVANCE_THRESHOLD;
-
     /// Creates a new [`LocalInner`].
     #[inline]
     pub fn new(global_epoch: Epoch) -> Self {
@@ -71,7 +66,7 @@ impl LocalInner {
         let global_epoch = self.acquire_and_assess_global_epoch();
 
         self.ops_count += 1;
-        if self.ops_count == Self::CHECK_THRESHOLD {
+        if self.ops_count == CHECK_THRESHOLD {
             self.ops_count = 0;
             self.try_advance(thread_state, global_epoch);
         }
@@ -177,7 +172,7 @@ impl LocalInner {
                 let _ = self.thread_iter.next();
 
                 // (INN:6) this `Release` CAS synchronizes-with the `Acquire` load (INN:3)
-                if self.can_advance && self.check_count >= Self::ADVANCE_THRESHOLD {
+                if self.can_advance && self.check_count >= ADVANCE_THRESHOLD {
                     EPOCH.compare_and_swap(global_epoch, global_epoch + 1, Release);
                 }
             }
