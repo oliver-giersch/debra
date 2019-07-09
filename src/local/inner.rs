@@ -84,9 +84,9 @@ impl LocalInner {
     /// Marks the associated thread as inactive.
     #[inline]
     pub fn set_inactive(&self, thread_state: &ThreadState) {
-        // (INN:2) this `SeqCst` store synchronizes-with the `SeqCst` load (INN:5), establishing a
-        // total order of all operations on `ThreadState` values.
-        thread_state.store(self.cached_local_epoch, Inactive, SeqCst);
+        // (INN:2) this `Release` store synchronizes-with the `SeqCst` load (INN:5) but without
+        // partaking in the total order of operations on `ThreadState` values.
+        thread_state.store(self.cached_local_epoch, Inactive, Release);
     }
 
     /// Retires the given `record` in the current epoch's bag queue.
