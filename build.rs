@@ -4,7 +4,6 @@ use std::io::Write;
 use std::path::Path;
 
 fn main() {
-    println!("cargo:rerun-if-env-changed=DEBRA_EPOCH_CACHE_SIZE");
     println!("cargo:rerun-if-env-changed=DEBRA_CHECK_THRESHOLD");
     println!("cargo:rerun-if-env-changed=DEBRA_ADVANCE_THRESHOLD");
 
