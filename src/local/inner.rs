@@ -149,7 +149,7 @@ impl LocalInner {
     /// observed all threads in a valid state (i.e. either inactive or as having
     /// announced the global epoch), it can attempt to advance the global epoch.
     #[inline]
-    fn try_advance_old(&mut self, thread_state: &ThreadState, global_epoch: Epoch) {
+    fn try_advance(&mut self, thread_state: &ThreadState, global_epoch: Epoch) {
         if let Ok(curr) = self.thread_iter.load_current_acquire() {
             let other = curr.unwrap_or_else(|| {
                 // we reached the end of the list and can restart, since this means we have
@@ -172,7 +172,7 @@ impl LocalInner {
 
                 // we must have checked all other threads at least once, before we can attempt to
                 // advance the global epoch
-                if self.can_advance && self.check_count >= Self::ADVANCE_THRESHOLD {
+                if self.can_advance && self.check_count >= ADVANCE_THRESHOLD {
                     // (INN:4) this `Release` CAS synchronizes-with the `Acquire` load (INN:3)
                     EPOCH.compare_and_swap(global_epoch, global_epoch + 1, Release);
                 }

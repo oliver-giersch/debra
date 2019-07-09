@@ -9,7 +9,7 @@ use core::marker::PhantomData;
 use core::mem;
 use core::ops::Deref;
 use core::ptr::{self, NonNull};
-use core::sync::atomic::Ordering::{self, Acquire, Relaxed, Release};
+use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 
 use crate::reclaim::align::CacheAligned;
 use crate::reclaim::prelude::*;
