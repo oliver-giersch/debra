@@ -7,7 +7,6 @@ license = "MIT/Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/oliver-giersch/debra"
 edition = "2018"
-build = "build.rs"
 exclude = [".travis.yml", "ci/*"]
 
 [features]
@@ -18,6 +17,17 @@ count-retire = []
 
 # disable for use in no_std crates (for limitations see README.md)
 std = ["debra-common/std"]
+
+bag-size-1 = ["debra-common/bag-size-1"]
+bag-size-2 = ["debra-common/bag-size-2"]
+bag-size-4 = ["debra-common/bag-size-4"]
+bag-size-8 = ["debra-common/bag-size-8"]
+bag-size-16 = ["debra-common/bag-size-16"]
+bag-size-32 = ["debra-common/bag-size-32"]
+bag-size-64 = ["debra-common/bag-size-64"]
+bag-size-128 = ["debra-common/bag-size-128"]
+bag-size-256 = ["debra-common/bag-size-256"]
+bag-size-512 = ["debra-common/bag-size-512"]
 
 [dependencies]
 cfg-if = "0.1.9"

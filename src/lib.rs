@@ -10,6 +10,7 @@ extern crate alloc;
 mod default;
 
 mod abandoned;
+mod config;
 mod global;
 mod guard;
 mod list;
@@ -18,8 +19,11 @@ mod sealed;
 
 use core::fmt;
 
-pub use debra_common::{reclaim, EPOCH_CACHE_SIZE};
+pub use debra_common::reclaim;
 pub use reclaim::typenum;
+
+pub use crate::config::{AlreadyInit, Config, GlobalConfig};
+pub use crate::global::CONFIG;
 
 #[cfg(not(feature = "std"))]
 pub use crate::local::Local;
@@ -93,17 +97,3 @@ unsafe impl Reclaim for Debra {
         local.retire_record(Retired::new_unchecked(unmarked));
     }
 }
-
-include!(concat!(env!("OUT_DIR"), "/build_constants.rs"));
-
-/// The threshold for initiating thread local reclamation checks.
-///
-/// Every time a thread is set active, a counter is increased.
-/// When the counter reaches the threshold, the thread initiates a check
-/// required for eventual reclamation of records.
-/// Deferring this check may improve performance, but delay the reclamation of
-/// accumulated garbage.
-pub const CHECK_THRESHOLD: u32 = DEBRA_CHECK_THRESHOLD;
-
-/// The threshold for attempting to advance the global epoch.
-pub const ADVANCE_THRESHOLD: u32 = DEBRA_ADVANCE_THRESHOLD;

@@ -11,9 +11,10 @@ use debra_common::thread::{
     ThreadState,
 };
 
+use crate::config::Config;
 use crate::global::{ABANDONED, EPOCH, THREADS};
 use crate::sealed::SealedList;
-use crate::{Retired, ADVANCE_THRESHOLD, CHECK_THRESHOLD};
+use crate::Retired;
 
 type BagPool = debra_common::bag::BagPool<crate::Debra>;
 type EpochBagQueues = debra_common::bag::EpochBagQueues<crate::Debra>;
@@ -65,13 +66,13 @@ impl LocalInner {
 
     /// Marks the associated thread as active.
     #[inline]
-    pub fn set_active(&mut self, thread_state: &ThreadState) {
+    pub fn set_active(&mut self, thread_state: &ThreadState, config: &Config) {
         let global_epoch = self.acquire_and_assess_global_epoch();
 
         self.ops_count += 1;
-        if self.ops_count == CHECK_THRESHOLD {
+        if self.ops_count == config.check_threshold() {
             self.ops_count = 0;
-            self.try_advance(thread_state, global_epoch);
+            self.try_advance(thread_state, global_epoch, config);
         }
 
         // (INN:1) this `SeqCst` store synchronizes-with the `SeqCst` load (INN:5), establishing a
@@ -149,7 +150,7 @@ impl LocalInner {
     /// observed all threads in a valid state (i.e. either inactive or as having
     /// announced the global epoch), it can attempt to advance the global epoch.
     #[inline]
-    fn try_advance(&mut self, thread_state: &ThreadState, global_epoch: Epoch) {
+    fn try_advance(&mut self, thread_state: &ThreadState, global_epoch: Epoch, config: &Config) {
         if let Ok(curr) = self.thread_iter.load_current_acquire() {
             let other = curr.unwrap_or_else(|| {
                 // we reached the end of the list and can restart, since this means we have
@@ -172,7 +173,7 @@ impl LocalInner {
 
                 // we must have checked all other threads at least once, before we can attempt to
                 // advance the global epoch
-                if self.can_advance && self.check_count >= ADVANCE_THRESHOLD {
+                if self.can_advance && self.check_count >= config.advance_threshold() {
                     // (INN:4) this `Release` CAS synchronizes-with the `Acquire` load (INN:3)
                     EPOCH.compare_and_swap(global_epoch, global_epoch + 1, Release);
                 }
