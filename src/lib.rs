@@ -22,7 +22,7 @@ use core::fmt;
 pub use debra_common::reclaim;
 pub use reclaim::typenum;
 
-pub use crate::config::{AlreadyInit, Config, GlobalConfig};
+pub use crate::config::{Config, GlobalConfig};
 pub use crate::global::CONFIG;
 
 #[cfg(not(feature = "std"))]
