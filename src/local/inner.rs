@@ -66,7 +66,11 @@ impl LocalInner {
 
     /// Marks the associated thread as active.
     #[inline]
-    pub fn set_active(&mut self, thread_state: &ThreadState, config: &Config) {
+    pub fn set_active<'local>(
+        &mut self,
+        thread_state: &'local ThreadState,
+        config: &'local Config,
+    ) {
         let global_epoch = self.acquire_and_assess_global_epoch();
 
         self.ops_count += 1;
