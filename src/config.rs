@@ -65,8 +65,8 @@ impl GlobalConfig {
 /// A type containing configuration parameters for the DEBRA reclamation scheme.
 #[derive(Copy, Clone, Debug)]
 pub struct Config {
-    check_thresh: u32,
-    advance_thresh: u32,
+    check_threshold: u32,
+    advance_threshold: u32,
 }
 
 /***** impl Default *******************************************************************************/
@@ -84,18 +84,27 @@ impl Config {
     /// Creates a new default [`Config`].
     #[inline]
     pub const fn new() -> Self {
-        Self { check_thresh: DEFAULT_CHECK_THRESHOLD, advance_thresh: DEFAULT_ADVANCE_THRESHOLD }
+        Self {
+            check_threshold: DEFAULT_CHECK_THRESHOLD,
+            advance_threshold: DEFAULT_ADVANCE_THRESHOLD,
+        }
+    }
+
+    /// Creates a new [`Config`] with the given parameters.
+    #[inline]
+    pub const fn with_params(check_threshold: u32, advance_threshold: u32) -> Self {
+        Self { check_threshold, advance_threshold }
     }
 
     #[inline]
     /// Returns the check threshold of the [`Config`].    
     pub fn check_threshold(&self) -> u32 {
-        self.check_thresh
+        self.check_threshold
     }
 
     /// Returns the advance threshold of the [`Config`].
     #[inline]
     pub fn advance_threshold(&self) -> u32 {
-        self.advance_thresh
+        self.advance_threshold
     }
 }
