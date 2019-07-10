@@ -1,4 +1,4 @@
-//! Global (static) values and data structures.
+//! Global (static) variables and data structures.
 
 use debra_common::epoch::AtomicEpoch;
 use debra_common::thread::ThreadState;
