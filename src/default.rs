@@ -1,7 +1,5 @@
 //! Thread local variables and access abstractions for *std* environments.
 
-use std::sync::RwLock;
-
 use debra_common::reclaim;
 use debra_common::LocalAccess;
 use reclaim::{GlobalReclaim, Reclaim};
