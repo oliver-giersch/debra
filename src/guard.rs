@@ -1,3 +1,14 @@
+//! Region guard type for the DEBRA reclamation scheme.
+//!
+//! Creating a [`Guard`] marks the current thread as active, which prevents all
+//! other threads from reclaiming any retired records.
+//! Dropping the [`Guard`] automatically marks the thread as inactive, even in
+//! the case of a panic.
+//!
+//! A thread can have an arbitrary number of active guards at the same, as
+//! creating new ones is re-entrant and only the guard created first has to
+//! globally announce the thread as active.
+
 use core::sync::atomic::Ordering;
 
 use debra_common::{reclaim, LocalAccess};
