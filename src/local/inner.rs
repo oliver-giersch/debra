@@ -151,6 +151,10 @@ impl LocalInner {
     /// Only, once a thread has visited all threads at least once and has
     /// observed all threads in a valid state (i.e. either inactive or as having
     /// announced the global epoch), it can attempt to advance the global epoch.
+    ///
+    /// # Notes
+    ///
+    /// This annotated with `#[cold]` to keep it out of the fast path.
     #[cold]
     fn try_advance(&mut self, thread_state: &ThreadState, global_epoch: Epoch) {
         if let Ok(curr) = self.thread_iter.load_current_acquire() {
@@ -183,10 +187,13 @@ impl LocalInner {
         }
     }
 
-    /// Checks if there are any abandoned records from threads that have quit.
+    /// Retires records from the oldest epoch queue, rotates the queues and then
+    /// attempts to adopt or reclaim any abandoned garbage which remains from
+    /// exited threads.
     ///
-    /// Any records that are older than two epochs are immediately reclaimed,
-    /// all others are put in the local thread's appropriate epoch bags
+    /// # Notes
+    ///
+    /// This annotated with `#[cold]` to keep it out of the fast path.
     #[cold]
     unsafe fn rotate_and_reclaim(&mut self) {
         // reclaims the oldest retired records and rotates the queues so that further records are
