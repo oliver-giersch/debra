@@ -72,7 +72,7 @@ impl<'a> LocalAccess for &'a Local {
         let count = self.guard_count.get();
         if count == 0 {
             let inner = unsafe { &mut *self.inner.get() };
-            inner.set_active(&**self.state, &self.config);
+            inner.set_active(&**self.state, self.config);
         }
 
         self.guard_count.set(count + 1);

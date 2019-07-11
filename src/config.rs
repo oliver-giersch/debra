@@ -51,7 +51,7 @@ impl GlobalConfig {
     #[inline]
     pub(crate) fn read_config_or_default(&self) -> Config {
         if self.init_state.load(Acquire) == READY {
-            unsafe { *&*self.config.get() }
+            unsafe { *self.config.get() }
         } else {
             Config::default()
         }
@@ -92,19 +92,20 @@ impl Config {
 
     /// Creates a new [`Config`] with the given parameters.
     #[inline]
-    pub const fn with_params(check_threshold: u32, advance_threshold: u32) -> Self {
+    pub fn with_params(check_threshold: u32, advance_threshold: u32) -> Self {
+        assert!(check_threshold > 0, "the check threshold must be larger than 0");
         Self { check_threshold, advance_threshold }
     }
 
     #[inline]
-    /// Returns the check threshold of the [`Config`].    
-    pub fn check_threshold(&self) -> u32 {
+    /// Returns the check threshold of the [`Config`].
+    pub fn check_threshold(self) -> u32 {
         self.check_threshold
     }
 
     /// Returns the advance threshold of the [`Config`].
     #[inline]
-    pub fn advance_threshold(&self) -> u32 {
+    pub fn advance_threshold(self) -> u32 {
         self.advance_threshold
     }
 }
