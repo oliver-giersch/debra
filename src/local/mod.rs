@@ -65,7 +65,7 @@ impl<'a> LocalAccess for &'a Local {
     #[inline]
     fn set_active(self) {
         let count = self.guard_count.get();
-        self.guard_count.set(count + 1); // TODO: Check for overflow
+        self.guard_count.set(count.checked_add(1).expect("guard count overflow"));
         if count == 0 {
             let inner = unsafe { &mut *self.inner.get() };
             inner.set_active(&**self.state);

@@ -71,11 +71,9 @@ impl LocalInner {
     pub fn set_active(&mut self, thread_state: &ThreadState) {
         let global_epoch = self.acquire_and_assess_global_epoch();
 
-        //self.ops_count += 1;
-        self.ops_count = self.ops_count.wrapping_add(1);
-        if self.ops_count % 128 == 0 {
-            //self.config.check_threshold() {
-            //self.ops_count = 0;
+        self.ops_count += 1;
+        if self.ops_count == self.config.check_threshold() {
+            self.ops_count = 0;
             self.try_advance(thread_state, global_epoch);
         }
 
