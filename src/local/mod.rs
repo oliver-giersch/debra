@@ -10,8 +10,7 @@ use core::sync::atomic::Ordering;
 use debra_common::thread::ThreadState;
 use debra_common::LocalAccess;
 
-use crate::config::Config;
-use crate::global::{CONFIG, EPOCH, THREADS};
+use crate::global::{EPOCH, THREADS};
 use crate::{Debra, Retired};
 
 use self::inner::LocalInner;
@@ -25,7 +24,6 @@ type ThreadEntry = crate::list::ListEntry<'static, ThreadState>;
 /// The thread-local state required for distributed epoch-based reclamation.
 #[derive(Debug)]
 pub struct Local {
-    config: Config,
     state: ManuallyDrop<ThreadEntry>,
     guard_count: Cell<usize>,
     inner: UnsafeCell<LocalInner>,
@@ -35,15 +33,12 @@ pub struct Local {
 
 impl Local {
     /// Creates and globally registers a new [`Local`].
-    #[inline]
     pub fn new() -> Self {
         let global_epoch = EPOCH.load(Ordering::SeqCst);
         let thread_epoch = ThreadState::new(global_epoch);
-        let config = CONFIG.read_config_or_default();
         let state = THREADS.insert(thread_epoch);
 
         Self {
-            config,
             state: ManuallyDrop::new(state),
             guard_count: Cell::default(),
             inner: UnsafeCell::new(LocalInner::new(global_epoch)),
@@ -70,23 +65,21 @@ impl<'a> LocalAccess for &'a Local {
     #[inline]
     fn set_active(self) {
         let count = self.guard_count.get();
+        self.guard_count.set(count + 1); // TODO: Check for overflow
         if count == 0 {
             let inner = unsafe { &mut *self.inner.get() };
-            inner.set_active(&**self.state, self.config);
+            inner.set_active(&**self.state);
         }
-
-        self.guard_count.set(count + 1);
     }
 
     #[inline]
     fn set_inactive(self) {
         let count = self.guard_count.get();
+        self.guard_count.set(count - 1);
         if count == 1 {
             let inner = unsafe { &*self.inner.get() };
             inner.set_inactive(&**self.state);
         }
-
-        self.guard_count.set(count - 1);
     }
 
     #[inline]

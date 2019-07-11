@@ -12,7 +12,7 @@ use debra_common::thread::{
 };
 
 use crate::config::Config;
-use crate::global::{ABANDONED, EPOCH, THREADS};
+use crate::global::{ABANDONED, CONFIG, EPOCH, THREADS};
 use crate::sealed::SealedList;
 use crate::Retired;
 
@@ -32,6 +32,7 @@ pub(super) struct LocalInner {
     cached_local_epoch: Epoch,
     can_advance: bool,
     check_count: u32,
+    config: Config,
     ops_count: u32,
     thread_iter: ThreadStateIter,
 }
@@ -48,6 +49,7 @@ impl LocalInner {
             cached_local_epoch: global_epoch,
             can_advance: false,
             check_count: 0,
+            config: CONFIG.read_config_or_default(),
             ops_count: 0,
             thread_iter: THREADS.iter(),
         }
@@ -66,13 +68,15 @@ impl LocalInner {
 
     /// Marks the associated thread as active.
     #[inline]
-    pub fn set_active(&mut self, thread_state: &ThreadState, config: Config) {
+    pub fn set_active(&mut self, thread_state: &ThreadState) {
         let global_epoch = self.acquire_and_assess_global_epoch();
 
-        self.ops_count += 1;
-        if self.ops_count == config.check_threshold() {
-            self.ops_count = 0;
-            self.try_advance(thread_state, global_epoch, config);
+        //self.ops_count += 1;
+        self.ops_count = self.ops_count.wrapping_add(1);
+        if self.ops_count % 128 == 0 {
+            //self.config.check_threshold() {
+            //self.ops_count = 0;
+            self.try_advance(thread_state, global_epoch);
         }
 
         // (INN:1) this `SeqCst` store synchronizes-with the `SeqCst` load (INN:5), establishing a
@@ -127,9 +131,7 @@ impl LocalInner {
             self.check_count = 0;
             self.thread_iter = THREADS.iter();
 
-            // it is now safe to reclaim the records stored in the oldest epoch bag
-            unsafe { self.bags.rotate_and_reclaim(&mut self.bag_pool) };
-            self.adopt_and_reclaim();
+            unsafe { self.rotate_and_reclaim() };
         }
 
         global_epoch
@@ -149,8 +151,8 @@ impl LocalInner {
     /// Only, once a thread has visited all threads at least once and has
     /// observed all threads in a valid state (i.e. either inactive or as having
     /// announced the global epoch), it can attempt to advance the global epoch.
-    #[inline]
-    fn try_advance(&mut self, thread_state: &ThreadState, global_epoch: Epoch, config: Config) {
+    #[cold]
+    fn try_advance(&mut self, thread_state: &ThreadState, global_epoch: Epoch) {
         if let Ok(curr) = self.thread_iter.load_current_acquire() {
             let other = curr.unwrap_or_else(|| {
                 // we reached the end of the list and can restart, since this means we have
@@ -173,7 +175,7 @@ impl LocalInner {
 
                 // we must have checked all other threads at least once, before we can attempt to
                 // advance the global epoch
-                if self.can_advance && self.check_count >= config.advance_threshold() {
+                if self.can_advance && self.check_count >= self.config.advance_threshold() {
                     // (INN:4) this `Release` CAS synchronizes-with the `Acquire` load (INN:3)
                     EPOCH.compare_and_swap(global_epoch, global_epoch + 1, Release);
                 }
@@ -186,12 +188,18 @@ impl LocalInner {
     /// Any records that are older than two epochs are immediately reclaimed,
     /// all others are put in the local thread's appropriate epoch bags
     #[cold]
-    #[inline]
-    fn adopt_and_reclaim(&mut self) {
+    unsafe fn rotate_and_reclaim(&mut self) {
+        // reclaims the oldest retired records and rotates the queues so that further records are
+        // retired into the flushed queue
+        self.bags.rotate_and_reclaim(&mut self.bag_pool);
+
+        // after rotating the epoch bags, we can potentially insert abandoned bags into their
+        // appropriate queues (this must only be done AFTER the rotation!)
         for sealed in ABANDONED.take_all() {
-            // otherwise, sealed is dropped
+            // sealed bags are retired according to the already adjusted epoch, otherwise they
+            // are dropped and their contents reclaimed right away
             if let Ok(age) = sealed.seal.relative_age(self.cached_local_epoch) {
-                let retired = unsafe { Retired::new_unchecked(NonNull::from(Box::leak(sealed))) };
+                let retired = Retired::new_unchecked(NonNull::from(Box::leak(sealed)));
                 self.bags.retire_record_by_age(retired, age, &mut self.bag_pool);
             }
         }
