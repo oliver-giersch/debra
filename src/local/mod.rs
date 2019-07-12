@@ -65,6 +65,8 @@ impl<'a> LocalAccess for &'a Local {
     #[inline]
     fn set_active(self) {
         let count = self.guard_count.get();
+        // this might THEORETICALLY overflow, but a check here adds 1-2 ns in
+        // the fast path, which is not worth it
         self.guard_count.set(count + 1);
 
         if count == 0 {
