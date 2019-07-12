@@ -2,10 +2,21 @@
 
 extern crate test;
 
+use std::mem;
+
 use test::Bencher;
 
 use crossbeam_utils::thread::scope;
 use debra::{Config, Guard, CONFIG};
+
+#[bench]
+fn only_pin(b: &mut Bencher) {
+    CONFIG.init_once(Config::with_params(128, 0));
+    b.iter(|| {
+        let guard = Guard::new();
+        mem::forget(guard);
+    })
+}
 
 #[bench]
 fn single_pin(b: &mut Bencher) {
