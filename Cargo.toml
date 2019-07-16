@@ -32,6 +32,10 @@ bag-size-512 = ["debra-common/bag-size-512"]
 [dependencies]
 cfg-if = "0.1.9"
 
+[dependencies.conquer-once]
+git = "https://github.com/oliver-giersch/conquer-once"
+default-features = false
+
 [dependencies.debra-common]
 #version = "0.1.1"
 git = "https://github.com/oliver-giersch/debra-common"

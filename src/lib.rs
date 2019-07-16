@@ -22,8 +22,7 @@ use core::fmt;
 pub use debra_common::reclaim;
 pub use reclaim::typenum;
 
-pub use crate::config::{Config, GlobalConfig};
-pub use crate::global::CONFIG;
+pub use crate::config::{Config, ConfigBuilder, CONFIG};
 
 #[cfg(not(feature = "std"))]
 pub use crate::local::Local;
@@ -73,12 +72,17 @@ type Retired = reclaim::Retired<Debra>;
 #[derive(Copy, Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Debra;
 
+/********** impl Display **************************************************************************/
+
 impl fmt::Display for Debra {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "distributed epoch based reclamation")
     }
 }
+
+/********** impl Reclaim **************************************************************************/
+
 unsafe impl Reclaim for Debra {
     type Local = Local;
     type RecordHeader = ();

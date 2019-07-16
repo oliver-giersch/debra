@@ -11,8 +11,8 @@ use debra_common::thread::{
     ThreadState,
 };
 
-use crate::config::Config;
-use crate::global::{ABANDONED, CONFIG, EPOCH, THREADS};
+use crate::config::{Config, CONFIG};
+use crate::global::{ABANDONED, EPOCH, THREADS};
 use crate::sealed::SealedList;
 use crate::Retired;
 
@@ -49,7 +49,7 @@ impl LocalInner {
             cached_local_epoch: global_epoch,
             can_advance: false,
             check_count: 0,
-            config: CONFIG.read_config_or_default(),
+            config: CONFIG.try_get().copied().unwrap_or_default(),
             ops_count: 0,
             thread_iter: THREADS.iter(),
         }

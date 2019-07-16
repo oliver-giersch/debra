@@ -1,62 +1,13 @@
-use core::cell::UnsafeCell;
-use core::sync::atomic::{
-    AtomicU8,
-    Ordering::{Acquire, Release},
-};
+#[cfg(feature = "std")]
+use conquer_once::spin::OnceCell;
+#[cfg(not(feature = "std"))]
+use conquer_once::OnceCell;
 
 const DEFAULT_CHECK_THRESHOLD: u32 = 100;
 const DEFAULT_ADVANCE_THRESHOLD: u32 = 100;
 
-const UNINIT: u8 = 0;
-const BUSY: u8 = 1;
-const READY: u8 = 2;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// GlobalConfig
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// One-time global lock-free configuration for the DEBRA reclamation scheme.
-#[derive(Debug)]
-pub struct GlobalConfig {
-    init_state: AtomicU8,
-    config: UnsafeCell<Config>,
-}
-
-/***** impl Sync **********************************************************************************/
-
-unsafe impl Sync for GlobalConfig {}
-
-/***** impl inherent ******************************************************************************/
-
-impl GlobalConfig {
-    /// Creates a new uninitialized [`GlobalConfig`].
-    #[inline]
-    pub const fn new() -> Self {
-        Self { init_state: AtomicU8::new(UNINIT), config: UnsafeCell::new(Config::new()) }
-    }
-
-    /// Initializes the [`GlobalConfig`] with the given `config`, but only once.
-    #[inline]
-    pub fn init_once(&self, config: Config) {
-        if UNINIT == self.init_state.compare_and_swap(UNINIT, BUSY, Acquire) {
-            let inner = unsafe { &mut *self.config.get() };
-            *inner = config;
-            self.init_state.store(READY, Release);
-        }
-    }
-
-    /// Reads the initialized [`Config`] or returns the default configuration,
-    /// if the [`GlobalConfig`] is either not or currently in the process of
-    /// being initialized.
-    #[inline]
-    pub(crate) fn read_config_or_default(&self) -> Config {
-        if self.init_state.load(Acquire) == READY {
-            unsafe { *self.config.get() }
-        } else {
-            Config::default()
-        }
-    }
-}
+/// Global configuration for the reclamation scheme.
+pub static CONFIG: OnceCell<Config> = OnceCell::new();
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Config
@@ -107,5 +58,48 @@ impl Config {
     #[inline]
     pub fn advance_threshold(self) -> u32 {
         self.advance_threshold
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// ConfigBuilder
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// A builder type for [`Config`] instances.
+#[derive(Copy, Clone, Debug, Default)]
+pub struct ConfigBuilder {
+    check_threshold: Option<u32>,
+    advance_threshold: Option<u32>,
+}
+
+impl ConfigBuilder {
+    /// Creates a new [`ConfigBuilder`].
+    #[inline]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sets the check threshold.
+    #[inline]
+    pub fn check_threshold(mut self, check_threshold: u32) -> Self {
+        self.check_threshold = Some(check_threshold);
+        self
+    }
+
+    /// Sets the advance threshold.
+    #[inline]
+    pub fn advance_threshold(mut self, advance_threshold: u32) -> Self {
+        self.advance_threshold = Some(advance_threshold);
+        self
+    }
+
+    /// Consumes the builder and creates a new [`Config`] instance with the
+    /// configured parameters or their default values, if they were not set.
+    #[inline]
+    pub fn build(self) -> Config {
+        Config {
+            check_threshold: self.check_threshold.unwrap_or(DEFAULT_CHECK_THRESHOLD),
+            advance_threshold: self.advance_threshold.unwrap_or(DEFAULT_ADVANCE_THRESHOLD),
+        }
     }
 }

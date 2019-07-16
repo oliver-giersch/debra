@@ -378,6 +378,8 @@ trait UnwrapPtr {
     fn unwrap_ptr(self) -> *mut Self::Item;
 }
 
+/********** impl UnwrapPtr ************************************************************************/
+
 impl<T> UnwrapPtr for Option<NonNull<T>> {
     type Item = T;
 
