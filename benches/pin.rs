@@ -7,11 +7,11 @@ use std::mem;
 use test::Bencher;
 
 use crossbeam_utils::thread::scope;
-use debra::{Config, Guard, CONFIG};
+use debra::{ConfigBuilder, Guard, CONFIG};
 
 #[bench]
 fn only_pin(b: &mut Bencher) {
-    CONFIG.init_once(Config::with_params(128, 0));
+    CONFIG.init_once(|| ConfigBuilder::new().check_threshold(128).advance_threshold(0).build());
     b.iter(|| {
         let guard = Guard::new();
         mem::forget(guard);
@@ -20,13 +20,13 @@ fn only_pin(b: &mut Bencher) {
 
 #[bench]
 fn single_pin(b: &mut Bencher) {
-    CONFIG.init_once(Config::with_params(128, 0));
+    CONFIG.init_once(|| ConfigBuilder::new().check_threshold(128).advance_threshold(0).build());
     b.iter(|| Guard::new());
 }
 
 #[bench]
 fn multi_pin(b: &mut Bencher) {
-    CONFIG.init_once(Config::with_params(128, 0));
+    CONFIG.init_once(|| ConfigBuilder::new().check_threshold(128).advance_threshold(0).build());
 
     const THREADS: usize = 16;
     const STEPS: usize = 100_000;
