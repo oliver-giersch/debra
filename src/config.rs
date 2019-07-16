@@ -20,7 +20,7 @@ pub struct Config {
     advance_threshold: u32,
 }
 
-/***** impl Default *******************************************************************************/
+/********** impl Default **************************************************************************/
 
 impl Default for Config {
     #[inline]
@@ -29,7 +29,7 @@ impl Default for Config {
     }
 }
 
-/***** impl inherent ******************************************************************************/
+/********** impl inherent *************************************************************************/
 
 impl Config {
     /// Creates a new default [`Config`].
@@ -72,6 +72,8 @@ pub struct ConfigBuilder {
     advance_threshold: Option<u32>,
 }
 
+/********** impl inherent *************************************************************************/
+
 impl ConfigBuilder {
     /// Creates a new [`ConfigBuilder`].
     #[inline]
@@ -82,6 +84,7 @@ impl ConfigBuilder {
     /// Sets the check threshold.
     #[inline]
     pub fn check_threshold(mut self, check_threshold: u32) -> Self {
+        assert!(check_threshold > 0, "the check threshold must be larger than 0");
         self.check_threshold = Some(check_threshold);
         self
     }

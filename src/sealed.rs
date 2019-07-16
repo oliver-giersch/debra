@@ -48,6 +48,8 @@ impl SealedList {
 // Sealed
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// A linked list of [`EpochBagQueues`] sealed with the epoch in which they were
+/// abandoned.
 #[derive(Debug)]
 pub(crate) struct Sealed {
     pub(crate) next: Option<NonNull<Sealed>>,
