@@ -105,7 +105,7 @@ impl LocalInner {
     ///
     /// After calling this method, no further calls to `retire_record` or
     /// `retire_final_record` must be made.
-    #[inline]
+    #[cold]
     pub unsafe fn retire_final_record(&mut self, record: Retired) {
         self.bags.retire_final_record(record);
     }
@@ -214,7 +214,7 @@ impl LocalInner {
 /***** impl Drop **********************************************************************************/
 
 impl Drop for LocalInner {
-    #[inline]
+    #[cold]
     // when a thread exits or panics, its yet un-reclaimed records can neither be leaked nor
     // instantly reclaimed; instead, all non-empty bag queues are pushed into a global queue, from
     // where other threads can adopt them and integrate them into their own appropriate epoch bags.
