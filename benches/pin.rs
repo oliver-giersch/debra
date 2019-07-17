@@ -3,11 +3,14 @@
 extern crate test;
 
 use std::mem;
+use std::sync::atomic::Ordering::Relaxed;
 
 use test::Bencher;
 
 use crossbeam_utils::thread::scope;
 use debra::{ConfigBuilder, Guard, CONFIG};
+
+type Atomic<T> = debra::Atomic<T, debra::typenum::U0>;
 
 #[ignore]
 #[bench]
@@ -15,6 +18,7 @@ fn only_pin(b: &mut Bencher) {
     CONFIG.init_once(|| ConfigBuilder::new().check_threshold(128).advance_threshold(0).build());
     b.iter(|| {
         let guard = Guard::new();
+        // this appears to mess with the other benchmarks, so only_pin should be run in isolation
         mem::forget(guard);
     })
 }
@@ -44,4 +48,14 @@ fn multi_pin(b: &mut Bencher) {
         })
         .unwrap();
     });
+}
+
+#[bench]
+fn pin_and_load(b: &mut Bencher) {
+    let atomic = Atomic::new(1);
+
+    b.iter(|| {
+        let guard = &Guard::new();
+        assert_eq!(*atomic.load(Relaxed, guard).unwrap(), 1);
+    })
 }
