@@ -59,6 +59,15 @@ impl<L: LocalAccess> Clone for Guard<L> {
     }
 }
 
+/***** impl Default *******************************************************************************/
+
+impl<L: LocalAccess + Default> Default for Guard<L> {
+    #[inline]
+    fn default() -> Self {
+        Self::with_local_access(Default::default())
+    }
+}
+
 /***** impl Drop **********************************************************************************/
 
 impl<L: LocalAccess> Drop for Guard<L> {

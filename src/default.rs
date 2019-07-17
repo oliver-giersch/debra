@@ -1,5 +1,7 @@
 //! Thread local variables and access abstractions for *std* environments.
 
+use std::marker::PhantomData;
+
 use debra_common::reclaim;
 use debra_common::LocalAccess;
 use reclaim::{GlobalReclaim, Reclaim};
@@ -56,16 +58,7 @@ unsafe impl GlobalReclaim for Debra {
 impl Guard<DefaultAccess> {
     #[inline]
     pub fn new() -> Self {
-        Self::with_local_access(DefaultAccess)
-    }
-}
-
-/***** impl Default *******************************************************************************/
-
-impl Default for Guard<DefaultAccess> {
-    #[inline]
-    fn default() -> Self {
-        Self::new()
+        Self::with_local_access(DefaultAccess::default())
     }
 }
 
@@ -73,8 +66,13 @@ impl Default for Guard<DefaultAccess> {
 // DefaultAccess
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// An alternative implementation using a raw pointer to the thread local state
+// was tested, which avoided some runtime check done by the std thread local
+// implementation.
+// When benchmarked, this alternative was surprisingly found out to be slower
+// and hence discarded
 #[derive(Copy, Clone, Debug, Default)]
-pub struct DefaultAccess;
+pub struct DefaultAccess(PhantomData<*mut ()>);
 
 /***** impl LocalAccess ***************************************************************************/
 
