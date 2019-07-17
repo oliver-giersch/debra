@@ -84,7 +84,6 @@ impl ConfigBuilder {
     /// Sets the check threshold.
     #[inline]
     pub fn check_threshold(mut self, check_threshold: u32) -> Self {
-        assert!(check_threshold > 0, "the check threshold must be larger than 0");
         self.check_threshold = Some(check_threshold);
         self
     }
@@ -100,9 +99,9 @@ impl ConfigBuilder {
     /// configured parameters or their default values, if they were not set.
     #[inline]
     pub fn build(self) -> Config {
-        Config {
-            check_threshold: self.check_threshold.unwrap_or(DEFAULT_CHECK_THRESHOLD),
-            advance_threshold: self.advance_threshold.unwrap_or(DEFAULT_ADVANCE_THRESHOLD),
-        }
+        Config::with_params(
+            self.check_threshold.unwrap_or(DEFAULT_CHECK_THRESHOLD),
+            self.advance_threshold.unwrap_or(DEFAULT_ADVANCE_THRESHOLD),
+        )
     }
 }

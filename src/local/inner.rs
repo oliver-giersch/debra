@@ -123,13 +123,7 @@ impl LocalInner {
         // the global epoch has been advanced since the last time this thread has called
         // `set_active`, restart all incremental checks
         if self.cached_local_epoch != global_epoch {
-            self.cached_local_epoch = global_epoch;
-            self.can_advance = false;
-            self.ops_count = 0;
-            self.check_count = 0;
-            self.thread_iter = THREADS.iter();
-
-            unsafe { self.rotate_and_reclaim() };
+            unsafe { self.advance_local_epoch(global_epoch) };
         }
 
         global_epoch
@@ -152,7 +146,7 @@ impl LocalInner {
     ///
     /// # Notes
     ///
-    /// This annotated with `#[cold]` to keep it out of the fast path.
+    /// This is annotated with `#[cold]` to keep it out of the fast path.
     #[cold]
     fn try_advance(&mut self, thread_state: &ThreadState, global_epoch: Epoch) {
         if let Ok(curr) = self.thread_iter.load_current_acquire() {
@@ -185,14 +179,34 @@ impl LocalInner {
         }
     }
 
+    /// Resets all incremental checks and advances the local epoch.
+    ///
+    /// # Safety
+    ///
+    /// The global epoch must be ahead of the local epoch.
+    ///
+    /// # Notes
+    ///
+    /// This is annotated with `#[cold]` to keep it out of the fast path.
+    #[cold]
+    unsafe fn advance_local_epoch(&mut self, global_epoch: Epoch) {
+        self.cached_local_epoch = global_epoch;
+        self.can_advance = false;
+        self.ops_count = 0;
+        self.check_count = 0;
+        self.thread_iter = THREADS.iter();
+
+        self.rotate_and_reclaim();
+    }
+
     /// Retires records from the oldest epoch queue, rotates the queues and then
     /// attempts to adopt or reclaim any abandoned garbage which remains from
     /// exited threads.
     ///
-    /// # Notes
+    /// # Safety
     ///
-    /// This annotated with `#[cold]` to keep it out of the fast path.
-    #[cold]
+    /// The global epoch must be ahead of the local epoch.
+    #[inline]
     unsafe fn rotate_and_reclaim(&mut self) {
         // reclaims the oldest retired records and rotates the queues so that further records are
         // retired into the flushed queue

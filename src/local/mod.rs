@@ -83,7 +83,7 @@ impl<'a> LocalAccess for &'a Local {
             let inner = unsafe { &*self.inner.get() };
             inner.set_inactive(&**self.state);
         } else if count == 0 {
-            panic!("guard count overflow detected");
+            panic!("guard count overflow");
         }
     }
 

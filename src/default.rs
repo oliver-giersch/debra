@@ -69,7 +69,7 @@ impl Guard<DefaultAccess> {
 // An alternative implementation using a raw pointer to the thread local state
 // was tested, which avoided some runtime check done by the std thread local
 // implementation.
-// When benchmarked, this alternative was surprisingly found out to be slower
+// When bench-marked, this alternative was surprisingly found out to be slower
 // and hence discarded
 #[derive(Copy, Clone, Debug, Default)]
 pub struct DefaultAccess(PhantomData<*mut ()>);
