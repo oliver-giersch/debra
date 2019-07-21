@@ -408,7 +408,7 @@ mod tests {
                 .map(|_| {
                     thread::spawn(|| {
                         let token = LIST.insert(thread::current().id());
-                        let _ = LIST.remove(token); // leaks memory
+                        let _ = LIST.remove(token); // deliberately leaks memory
                     })
                 })
                 .collect();
