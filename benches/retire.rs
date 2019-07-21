@@ -22,3 +22,18 @@ fn retire(b: &mut Bencher) {
         unsafe { unlinked.retire() };
     });
 }
+
+#[bench]
+fn retire_varied(b: &mut Bencher) {
+    CONFIG.init_once(|| ConfigBuilder::new().check_threshold(128).advance_threshold(0).build());
+
+    let int = Atomic::new(1);
+    let string = Atomic::new(String::from("string"));
+    let arr = Atomic::new([0usize; 16]);
+
+    b.iter(|| unsafe {
+        int.swap(Owned::new(1), Relaxed).unwrap().retire();
+        string.swap(Owned::new(String::from("string")), Relaxed).unwrap().retire();
+        arr.swap(Owned::new([0usize; 16]), Relaxed).unwrap().retire();
+    });
+}

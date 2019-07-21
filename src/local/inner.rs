@@ -27,13 +27,25 @@ type ThreadStateIter = crate::list::Iter<'static, ThreadState>;
 /// The internal mutable thread-local state.
 #[derive(Debug)]
 pub(super) struct LocalInner {
+    /// The counter for determining when to attempt to advance the
+    /// global epoch
+    advance_count: u32,
+    /// The epoch bags used for caching retired records
     bags: ManuallyDrop<EpochBagQueues>,
+    /// The thread local pool for allocating new bags
     bag_pool: BagPool,
+    /// The cached value of the last observed global epoch value
     cached_local_epoch: Epoch,
+    /// The flag determining whether a thread is able to advance the
+    /// global epoch
     can_advance: bool,
+    /// The counter for determining when to perform the advance check on the
+    /// next thread
     check_count: u32,
+    /// The copy of the global configuration that is read once during
+    /// a thread's creation
     config: Config,
-    ops_count: u32,
+    /// The iterator over all globally registered threads
     thread_iter: ThreadStateIter,
 }
 
@@ -44,13 +56,13 @@ impl LocalInner {
     #[inline]
     pub fn new(global_epoch: Epoch) -> Self {
         Self {
+            advance_count: 0,
             bags: ManuallyDrop::new(EpochBagQueues::new()),
             bag_pool: BagPool::new(),
             cached_local_epoch: global_epoch,
             can_advance: false,
-            check_count: 0,
             config: CONFIG.try_get().copied().unwrap_or_default(),
-            ops_count: 0,
+            check_count: 0,
             thread_iter: THREADS.iter(),
         }
     }
@@ -71,9 +83,9 @@ impl LocalInner {
     pub fn set_active(&mut self, thread_state: &ThreadState) {
         let global_epoch = self.acquire_and_assess_global_epoch();
 
-        self.ops_count += 1;
-        if self.ops_count == self.config.check_threshold() {
-            self.ops_count = 0;
+        self.check_count += 1;
+        if self.check_count == self.config.check_threshold() {
+            self.check_count = 0;
             self.try_advance(thread_state, global_epoch);
         }
 
@@ -166,12 +178,12 @@ impl LocalInner {
             //   b) has announced the global epoch or
             //   c) is currently inactive
             if thread_state.is_same(other) || can_advance(global_epoch, other) {
-                self.check_count += 1;
+                self.advance_count += 1;
                 let _ = self.thread_iter.next();
 
                 // we must have checked all other threads at least once, before we can attempt to
                 // advance the global epoch
-                if self.can_advance && self.check_count >= self.config.advance_threshold() {
+                if self.can_advance && self.advance_count >= self.config.advance_threshold() {
                     // (INN:4) this `Release` CAS synchronizes-with the `Acquire` load (INN:3)
                     EPOCH.compare_and_swap(global_epoch, global_epoch + 1, Release);
                 }
@@ -192,8 +204,8 @@ impl LocalInner {
     unsafe fn advance_local_epoch(&mut self, global_epoch: Epoch) {
         self.cached_local_epoch = global_epoch;
         self.can_advance = false;
-        self.ops_count = 0;
         self.check_count = 0;
+        self.advance_count = 0;
         self.thread_iter = THREADS.iter();
 
         self.rotate_and_reclaim();
