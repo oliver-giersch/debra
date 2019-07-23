@@ -1,3 +1,5 @@
+# THIS CRATE IS WORK IN PROGRESS
+
 # Debra
 
 Distributed epoch-based memory reclamation
@@ -8,7 +10,7 @@ https://travis-ci.com/oliver-giersch/debra)
 [![Documentation](https://docs.rs/debra/badge.svg)](https://docs.rs/debra)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](
 https://github.com/oliver-giersch/debra)
-[![Rust 1.36+](https://img.shields.io/badge/rust-1.36+-lightgray.svg)](
+[![Rust 1.36+](https://img.shields.io/badge/rust-1.36.0-lightgray.svg)](
 https://www.rust-lang.org)
 
 Many concurrent lock-free data structures require an additional minimal (also lock-free)
@@ -16,7 +18,12 @@ garbage collector, which determines, when a removed value can be safely de-alloc
 This can not be determined statically, since many threads could potentially still access
 previously created references to the removed value.
 This crate provides a simple and (mostly) safe interface for interacting with the
-[DEBRA](https://dl.acm.org/citation.cfm?id=2767436) memory reclamation scheme.
+DEBRA [1] memory reclamation scheme.
+
+[[1]](https://dl.acm.org/citation.cfm?id=2767436)
+Trevor Brown,
+"Reclaiming memory for lock-free data structures: There has to be a better way",
+in ACM, 2015
 
 ## Usage
 
@@ -29,7 +36,7 @@ debra = "0.1"
 
 ## Minimum Supported Rust Version (MSRV)
 
-The minimum supported (stable) rust version for this crate is 1.36.0
+The minimum supported Rust version for this crate is 1.36.0.
 
 ## Comparison with [crossbeam-epoch](https://crates.io/crates/crossbeam-epoch)
 
@@ -42,10 +49,7 @@ of Treiber's stack using `debra` for memory reclamation.
 
 ## Features
 
-...TODO...
-DEBRA_EPOCH_CACHE_SIZE
-DEBRA_CHECK_THRESHOLD
-DEBRA_ADVANCE_THRESHOLD
+...TODO... (bag-size-1 through bag-size-512)
 
 ## License
 
