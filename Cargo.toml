@@ -1,49 +1,12 @@
 [package]
 name = "debra"
 description = "distributed epoch-based reclamation"
-version = "0.1.0"
+version = "0.0.0"
 authors = ["Oliver Giersch"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/oliver-giersch/debra"
+documentation = "https://docs.rs/debra"
+keywords = ["epoch", "reclamation", "concurrent", "lock-free"]
 edition = "2018"
 exclude = [".travis.yml", "ci/*"]
-
-[features]
-default = ["std"]
-
-# retiring of records counts towards flush threshold
-count-retire = []
-
-# disable for use in no_std crates (for limitations see README.md)
-std = ["debra-common/std"]
-
-bag-size-1   = ["debra-common/bag-size-1"]
-bag-size-2   = ["debra-common/bag-size-2"]
-bag-size-4   = ["debra-common/bag-size-4"]
-bag-size-8   = ["debra-common/bag-size-8"]
-bag-size-16  = ["debra-common/bag-size-16"]
-bag-size-32  = ["debra-common/bag-size-32"]
-bag-size-64  = ["debra-common/bag-size-64"]
-bag-size-128 = ["debra-common/bag-size-128"]
-bag-size-256 = ["debra-common/bag-size-256"]
-bag-size-512 = ["debra-common/bag-size-512"]
-
-[dependencies]
-cfg-if = "0.1.9"
-
-[dependencies.conquer-once]
-git = "https://github.com/oliver-giersch/conquer-once"
-default-features = false
-
-[dependencies.debra-common]
-#version = "0.1.1"
-git = "https://github.com/oliver-giersch/debra-common"
-default-features = false
-
-[dev-dependencies]
-crossbeam-utils = "0.6.5"
-
-[profile.release]
-lto = true
-debug = true
