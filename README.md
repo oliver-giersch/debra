@@ -2,8 +2,8 @@
 
 Distributed epoch-based memory reclamation
 
-[![Build Status](https://travis-ci.com/oliver-giersch/debra.svg?branch=master)](
-https://travis-ci.com/oliver-giersch/debra)
+[![Build Status](https://travis-ci.org/oliver-giersch/debra.svg?branch=master)](
+https://travis-ci.org/oliver-giersch/debra)
 [![Latest version](https://img.shields.io/crates/v/debra.svg)](https://crates.io/crates/debra)
 [![Documentation](https://docs.rs/debra/badge.svg)](https://docs.rs/debra)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](
